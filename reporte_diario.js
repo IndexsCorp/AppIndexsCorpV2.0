@@ -1204,7 +1204,25 @@ window.accionGenerarPrevisualizacion = async function() {
             
             document.getElementById('pdfPlaceholder').classList.add('hidden');
             const rootCont = document.getElementById('pdfContenedorRaiz');
-            rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-[650px] rounded-xl shadow-lg border border-slate-300"></iframe>`;
+            
+            // Detección de dispositivo
+            const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (esCelular) {
+                // Interfaz amigable para móviles
+                rootCont.innerHTML = `
+                    <div class="text-center p-8 bg-slate-100 rounded-xl w-full border border-slate-300 shadow-sm">
+                        <span class="material-symbols-outlined text-5xl text-corpBlue-600 mb-3">picture_as_pdf</span>
+                        <p class="text-slate-700 font-bold mb-4 text-lg">El PDF está compilado</p>
+                        <a href="${pdfUrl}" target="_blank" class="inline-block bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition">
+                            Visualizar Documento
+                        </a>
+                    </div>`;
+            } else {
+                // Visor clásico para PC
+                rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-[650px] rounded-xl shadow-lg border border-slate-300"></iframe>`;
+            }
+            
             rootCont.classList.remove('hidden');
 
             const btnGuardar = document.getElementById('btnGuardarOficial');
@@ -1337,36 +1355,22 @@ window.accionEnviarCorreoDefinitivo = async function(proveedor) {
     const suEnc = encodeURIComponent(asunto);
     const bodyEnc = encodeURIComponent(cuerpo);
 
-    // Detectar si el usuario está en un celular (Android o iOS)
     const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
-    // Enlace genérico por defecto (abre la app predeterminada del teléfono o PC)
-    const mailtoGenerico = `mailto:${toEnc}?subject=${suEnc}&body=${bodyEnc}${cc ? `&cc=${ccEnc}` : ''}`;
+    // El protocolo mailto estándar garantiza que TO y CC se separen perfectamente en cualquier app móvil
+    let mailtoEstandar = `mailto:${toEnc}?subject=${suEnc}&body=${bodyEnc}`;
+    if (cc) mailtoEstandar += `&cc=${ccEnc}`;
 
-    if (proveedor === 'gmail') {
-        if (esCelular) {
-            // Intenta abrir la App nativa de Gmail en el celular
-            window.location.href = `googlegmail://co?to=${toEnc}&cc=${ccEnc}&subject=${suEnc}&body=${bodyEnc}`;
-            // Fallback: Si no tiene la app de Gmail instalada, usa la predeterminada del teléfono
-            setTimeout(() => { window.location.href = mailtoGenerico; }, 600);
-        } else {
-            // En computadora: Abre Gmail Web
-            window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${toEnc}&cc=${ccEnc}&su=${suEnc}&body=${bodyEnc}`, '_blank');
-        }
+    if (proveedor === 'gmail' && !esCelular) {
+        // En PC: Abre Gmail en pestaña nueva
+        window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${toEnc}&cc=${ccEnc}&su=${suEnc}&body=${bodyEnc}`, '_blank');
         
-    } else if (proveedor === 'outlook') {
-        if (esCelular) {
-            // Intenta abrir la App nativa de Outlook en el celular
-            window.location.href = `ms-outlook://compose?to=${toEnc}&cc=${ccEnc}&subject=${suEnc}&body=${bodyEnc}`;
-            // Fallback: Si no tiene la app de Outlook instalada, usa la predeterminada del teléfono
-            setTimeout(() => { window.location.href = mailtoGenerico; }, 600);
-        } else {
-            // En computadora: Abre Outlook Web
-            window.open(`https://outlook.office.com/mail/deeplink/compose?to=${toEnc}&cc=${ccEnc}&subject=${suEnc}&body=${bodyEnc}`, '_blank');
-        }
+    } else if (proveedor === 'outlook' && !esCelular) {
+        // En PC: Abre Outlook Web en pestaña nueva
+        window.open(`https://outlook.office.com/mail/deeplink/compose?to=${toEnc}&cc=${ccEnc}&subject=${suEnc}&body=${bodyEnc}`, '_blank');
         
     } else {
-        // Opción 'App del Equipo': Usa el gestor predeterminado siempre (Apple Mail, gestor nativo de Android, etc.)
-        window.location.href = mailtoGenerico;
+        // En Celular (cualquier botón) o en botón "App del Equipo": 
+        window.location.href = mailtoEstandar;
     }
 };
