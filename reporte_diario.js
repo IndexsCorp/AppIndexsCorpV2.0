@@ -1350,27 +1350,26 @@ window.accionEnviarCorreoDefinitivo = async function(proveedor) {
         }
     }
 
-    const toEnc = encodeURIComponent(para);
-    const ccEnc = encodeURIComponent(cc);
+    // Separamos por comas, codificamos cada correo individualmente y los volvemos a unir con comas reales
+    const toEnc = para.split(',').map(e => encodeURIComponent(e.trim())).join(',');
+    const ccEnc = cc ? cc.split(',').map(e => encodeURIComponent(e.trim())).join(',') : '';
     const suEnc = encodeURIComponent(asunto);
     const bodyEnc = encodeURIComponent(cuerpo);
 
     const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
-    // El protocolo mailto estándar garantiza que TO y CC se separen perfectamente en cualquier app móvil
-    let mailtoEstandar = `mailto:${toEnc}?subject=${suEnc}&body=${bodyEnc}`;
-    if (cc) mailtoEstandar += `&cc=${ccEnc}`;
+    // EL ORDEN ES CRÍTICO: El parámetro 'body' siempre debe ir al final
+    let mailtoEstandar = `mailto:${toEnc}?`;
+    if (ccEnc) mailtoEstandar += `cc=${ccEnc}&`;
+    mailtoEstandar += `subject=${suEnc}&body=${bodyEnc}`;
 
     if (proveedor === 'gmail' && !esCelular) {
-        // En PC: Abre Gmail en pestaña nueva
         window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${toEnc}&cc=${ccEnc}&su=${suEnc}&body=${bodyEnc}`, '_blank');
         
     } else if (proveedor === 'outlook' && !esCelular) {
-        // En PC: Abre Outlook Web en pestaña nueva
         window.open(`https://outlook.office.com/mail/deeplink/compose?to=${toEnc}&cc=${ccEnc}&subject=${suEnc}&body=${bodyEnc}`, '_blank');
         
     } else {
-        // En Celular (cualquier botón) o en botón "App del Equipo": 
         window.location.href = mailtoEstandar;
     }
 };
