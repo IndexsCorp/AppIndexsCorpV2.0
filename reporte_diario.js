@@ -110,28 +110,28 @@ async function cargarConfiguracionProyecto() {
             const data = docSnap.data();
             
             window.APP_STATE.nombreProyecto = data.name_proyect || PROJECT_ID;
-            window.APP_STATE.logoProyecto = data.logo_proyect || "";
             window.APP_STATE.clienteProyecto = data.client_proyect || "";
             window.APP_STATE.contratistaProyecto = data.contratista_proyect || "";
             window.APP_STATE.supervisionProyecto = data.supervision_proyect || "";
             window.APP_STATE.ubicacionProyecto = data.ubi_proyect || "";
+            window.APP_STATE.idEmpresa = data.id_empresa || "";
             
-            // NUEVO: Extraer correos desde Firestore
+            // Consultar la colección relacional "empresas" usando id_empresa
+            if (window.APP_STATE.idEmpresa) {
+                const empRef = doc(db, "empresas", window.APP_STATE.idEmpresa);
+                const empSnap = await getDoc(empRef);
+                if (empSnap.exists()) {
+                    const empData = empSnap.data();
+                    window.APP_STATE.logoEmpresa = empData.logo_empresa || "";
+                    window.APP_STATE.nombreEmpresa = empData.nombre_empresa || "";
+                }
+            }
+
             window.APP_STATE.correosPara = data.correos_Para || "";
             window.APP_STATE.correosCC = data.correos_cc || "";
 
             const nameEl = document.getElementById('sidebar-project-name');
             if (nameEl) nameEl.innerText = window.APP_STATE.nombreProyecto;
-            
-            const sidebarLogoEl = document.getElementById('sidebar-logo');
-            if (sidebarLogoEl && window.APP_STATE.logoProyecto) {
-                sidebarLogoEl.src = window.APP_STATE.logoProyecto;
-            }
-
-            const logoCanvasImg = document.getElementById('logoImage');
-            if (logoCanvasImg && window.APP_STATE.logoProyecto) {
-                logoCanvasImg.src = window.APP_STATE.logoProyecto;
-            }
 
             window.APP_STATE.frentes = data.frentes || [];
             window.APP_STATE.especialidades = data.especialidad || [];
@@ -141,7 +141,6 @@ async function cargarConfiguracionProyecto() {
         }
     } catch (error) {
         console.error("Error cargando configuración:", error);
-        alert("Error al conectar con la base de datos.");
     }
 }
 
@@ -1093,8 +1092,8 @@ window.accionGenerarPrevisualizacion = async function() {
 
         // 3. Objeto de datos estandarizado para la plantilla
         const datosPlantilla = {
-            logo: window.APP_STATE.logoProyecto ? await urlToBase64(window.APP_STATE.logoProyecto) : '',
-            nombreEmpresa: "Empresa Contratista",
+            logo: window.APP_STATE.logoEmpresa ? await urlToBase64(window.APP_STATE.logoEmpresa) : '',
+            nombreEmpresa: window.APP_STATE.nombreEmpresa || "",
             nombreProyecto: window.APP_STATE.nombreProyecto,
             cliente: window.APP_STATE.clienteProyecto,
             contratista: window.APP_STATE.contratistaProyecto,

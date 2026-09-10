@@ -6,7 +6,9 @@ export function generarDocDefinition(datos) {
         table: {
             widths: ['30%', '70%'],
             body: [[
-                datos.logo ? { image: datos.logo, fit: [110, 40], alignment: 'center', margin: [0, 2, 0, 2] } : { text: datos.nombreEmpresa || '', color: 'white', bold: true, fontSize: 14, alignment: 'center', margin: [0, 10, 0, 0] },
+                datos.logo 
+                    ? { image: datos.logo, fit: [110, 40], alignment: 'center', margin: [0, 2, 0, 2] } 
+                    : { text: datos.nombreEmpresa || '', color: 'white', bold: true, fontSize: 14, alignment: 'center', margin: [0, 10, 0, 0] },
                 {
                     stack: [
                         { text: 'REPORTE DIARIO DE AVANCE DE OBRA', fontSize: 11, bold: true, color: '#FFFFFF', alignment: 'center' },
@@ -55,6 +57,7 @@ export function generarDocDefinition(datos) {
         margin: [0, 4, 0, 4]
     });
 
+    // PÁGINA 1: TEXTO
     const docContent = [
         crearHeader(),
         crearMetadata(),
@@ -70,23 +73,29 @@ export function generarDocDefinition(datos) {
         datos.listaAnotaciones.length > 0 ? { ul: datos.listaAnotaciones, margin: [10, 0, 0, 5] } : { text: 'Sin anotaciones registradas.', fontSize: 8, italic: true }
     ];
 
-    if (datos.fotosProcesadas.length > 0) {
+    // PÁGINAS SIGUIENTES: FOTOS (Agrupadas estrictamente de 6 en 6)
+    const FOTOS_POR_PAGINA = 6;
+    for (let offset = 0; offset < datos.fotosProcesadas.length; offset += FOTOS_POR_PAGINA) {
+        const bloqueFotos = datos.fotosProcesadas.slice(offset, offset + FOTOS_POR_PAGINA);
+
         docContent.push({ text: '', pageBreak: 'before' });
         docContent.push(crearHeader());
         docContent.push(crearMetadata());
         docContent.push(makeSectionTitle('Registro Fotográfico y Actividades de Obra'));
 
         const photoColumns = [];
-        for (let i = 0; i < datos.fotosProcesadas.length; i += 2) {
-            const f1 = datos.fotosProcesadas[i];
-            const f2 = datos.fotosProcesadas[i + 1];
+        for (let i = 0; i < bloqueFotos.length; i += 2) {
+            const f1 = bloqueFotos[i];
+            const f2 = bloqueFotos[i + 1];
+            const numIndex1 = offset + i + 1;
+            const numIndex2 = offset + i + 2;
 
             const rowCols = [
                 {
                     stack: [{
                         table: { widths: ['*'], body: [
                             [{ image: f1.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
-                            [{ text: `${i + 1}. ${f1.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
+                            [{ text: `${numIndex1}. ${f1.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
                         ]},
                         layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
                     }], width: '50%'
@@ -98,7 +107,7 @@ export function generarDocDefinition(datos) {
                     stack: [{
                         table: { widths: ['*'], body: [
                             [{ image: f2.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
-                            [{ text: `${i + 2}. ${f2.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
+                            [{ text: `${numIndex2}. ${f2.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
                         ]},
                         layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
                     }], width: '50%'
@@ -106,7 +115,7 @@ export function generarDocDefinition(datos) {
             } else {
                 rowCols.push({ text: '', width: '50%' });
             }
-            photoColumns.push({ columns: rowCols, columnGap: 14, margin: [0, 0, 0, 12] });
+            photoColumns.push({ columns: rowCols, columnGap: 14, margin: [0, 0, 0, 10] });
         }
         docContent.push(...photoColumns);
     }
