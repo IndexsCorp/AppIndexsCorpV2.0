@@ -1093,7 +1093,7 @@ window.accionGenerarPrevisualizacion = async function() {
         // 3. Objeto de datos estandarizado para la plantilla
         const datosPlantilla = {
             logo: window.APP_STATE.logoEmpresa ? await urlToBase64(window.APP_STATE.logoEmpresa) : '',
-            nombreEmpresa: window.APP_STATE.nombreEmpresa || "",
+            nombreEmpresa: window.APP_STATE.nombreEmpresa || "", // <--- Utiliza la variable dinámica cargada desde empresas
             nombreProyecto: window.APP_STATE.nombreProyecto,
             cliente: window.APP_STATE.clienteProyecto,
             contratista: window.APP_STATE.contratistaProyecto,
