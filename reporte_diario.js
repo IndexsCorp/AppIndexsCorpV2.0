@@ -1022,7 +1022,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-let pdfBlobGenerado = null; // Guardará el archivo compilado en memoria
+let pdfBlobGenerado = null; // Variable global restaurada para guardar el Blob
 
 window.accionGenerarPrevisualizacion = async function() {
     const fecha = document.getElementById('prevDateField').value;
@@ -1035,7 +1035,7 @@ window.accionGenerarPrevisualizacion = async function() {
     localStorage.setItem("firmaResidente", firma);
 
     const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Aplicando Plantilla...`;
+    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Compilando Vectorial...`;
     btn.disabled = true;
 
     try {
@@ -1043,7 +1043,7 @@ window.accionGenerarPrevisualizacion = async function() {
         const docSnap = await getDoc(doc(db, "reportes_diarios", docId));
 
         if (!docSnap.exists()) {
-            alert(`No hay registros guardados para el día ${fecha}. Debe ingresar datos primero.`);
+            alert(`No hay registros guardados para el día ${fecha}.`);
             btn.innerHTML = origText;
             btn.disabled = false;
             return;
@@ -1056,127 +1056,157 @@ window.accionGenerarPrevisualizacion = async function() {
         const fechaFmt = `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0]}`;
         const correlativo = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
 
-        // 2. Armar las cadenas HTML simples para inyectar en la plantilla principal
-        // --- Actividades ---
-        let htmlActividades = (data.actividades && data.actividades.length > 0) 
-            ? `<ul style="margin:0; padding-left:20px; font-size:12px;">` + 
-              data.actividades.map(a => `<li style="margin-bottom:6px;">${a.texto_act}</li>`).join('') + 
-              `</ul>`
-            : '';
+        // 2. Formatear arreglos para PDFMake
+        const listaActividades = (data.actividades || []).map(a => ({ text: a.texto_act, fontSize: 8, margin: [0, 1, 0, 1] }));
+        const listaAnotaciones = (data.anotaciones || []).map(an => ({ text: `[${an.hora_anot}] ${an.texto_anot}`, fontSize: 8, margin: [0, 1, 0, 1] }));
 
-        // --- Personal ---
-        let htmlPersonal = '';
-        if (data.personal && data.personal.length > 0) {
-            let totalCant = 0;
-            let rows = data.personal.map((p, idx) => {
-                const cant = parseInt(p.cantidad) || 0;
-                totalCant += cant;
-                return `<tr>
-                    <td style="border:1px solid #1e293b; padding:4px; text-align:center;">${idx + 1}</td>
-                    <td style="border:1px solid #1e293b; padding:4px;">${p.rubro_personal || ''}</td>
-                    <td style="border:1px solid #1e293b; padding:4px;">${p.sector_personal || ''}</td>
-                    <td style="border:1px solid #1e293b; padding:4px; text-align:center; font-weight:bold;">${cant}</td>
-                </tr>`;
-            }).join('');
-            
-            htmlPersonal = `
-                <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                    <thead style="background-color:#f1f5f9;">
-                        <tr>
-                            <th style="border:1px solid #1e293b; padding:4px; width:10%;">N°</th>
-                            <th style="border:1px solid #1e293b; padding:4px; width:40%;">RUBRO</th>
-                            <th style="border:1px solid #1e293b; padding:4px; width:30%;">SECTOR / FRENTE</th>
-                            <th style="border:1px solid #1e293b; padding:4px; width:20%;">CANTIDAD</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                    <tfoot>
-                        <tr style="background-color:#f1f5f9;">
-                            <td colspan="3" style="border:1px solid #1e293b; padding:4px; text-align:right; font-weight:bold;">TOTAL PERSONAL DEL DÍA:</td>
-                            <td style="border:1px solid #1e293b; padding:4px; text-align:center; font-weight:bold; font-size:13px;">${totalCant}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            `;
-        }
+        let totalCant = 0;
+        let bodyPersonal = [
+            [
+                { text: 'N°', bold: true, alignment: 'center', fontSize: 8, fillColor: '#F1F5F9' },
+                { text: 'RUBRO', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
+                { text: 'SECTOR / FRENTE', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
+                { text: 'CANTIDAD', bold: true, alignment: 'center', fontSize: 8, fillColor: '#F1F5F9' }
+            ]
+        ];
+        (data.personal || []).forEach((p, idx) => {
+            const cant = parseInt(p.cantidad) || 0;
+            totalCant += cant;
+            bodyPersonal.push([
+                { text: `${idx + 1}.`, alignment: 'center', fontSize: 8 },
+                { text: p.rubro_personal || '', fontSize: 8 },
+                { text: p.sector_personal || '', fontSize: 8 },
+                { text: cant.toString(), alignment: 'center', bold: true, fontSize: 8 }
+            ]);
+        });
+        bodyPersonal.push([
+            { text: 'TOTAL PERSONAL DEL DÍA:', colSpan: 3, alignment: 'right', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
+            {}, {}, { text: totalCant.toString(), alignment: 'center', bold: true, fontSize: 9, fillColor: '#F1F5F9' }
+        ]);
 
-        // --- Anotaciones ---
-        let htmlAnotaciones = (data.anotaciones && data.anotaciones.length > 0)
-            ? `<ul style="margin:0; padding-left:20px; font-size:12px;">` + 
-              data.anotaciones.map(an => `<li style="margin-bottom:6px;"><b>[${an.hora_anot}]</b> ${an.texto_anot}</li>`).join('') + 
-              `</ul>`
-            : '';
-
-        // --- Fotos (Convertidas a base64 para evitar bloqueos CORS al imprimir) ---
         const actividadesConFoto = (data.actividades || []).filter(a => a.urlfoto_act);
-        let fotosProcesadasArray = [];
-        if(actividadesConFoto.length > 0) {
-            btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Optimizando Imágenes...`;
-            for (let a of actividadesConFoto) {
-                const b64 = await urlToBase64(a.urlfoto_act);
-                if (b64) fotosProcesadasArray.push({ url: b64, descripcion: a.texto_act });
-            }
+        const fotosProcesadas = [];
+        for (let a of actividadesConFoto) {
+            const b64 = await urlToBase64(a.urlfoto_act);
+            if (b64) fotosProcesadas.push({ base64: b64, texto: a.texto_act });
         }
 
-        // 3. Agrupar los datos en el objeto estandarizado
+        // 3. Objeto de datos estandarizado para la plantilla
         const datosPlantilla = {
             logo: window.APP_STATE.logoProyecto ? await urlToBase64(window.APP_STATE.logoProyecto) : '',
-            nombreEmpresa: "Empresa Contratista", // Este dato idealmente vendría de la colección empresas
+            nombreEmpresa: "Empresa Contratista",
             nombreProyecto: window.APP_STATE.nombreProyecto,
             cliente: window.APP_STATE.clienteProyecto,
             contratista: window.APP_STATE.contratistaProyecto,
             elaboradoPor: firma,
             fecha: fechaFmt,
             correlativo: correlativo,
-            htmlActividades: htmlActividades,
-            htmlPersonal: htmlPersonal,
-            htmlAnotaciones: htmlAnotaciones,
-            fotosArray: fotosProcesadasArray
+            listaActividades: listaActividades,
+            bodyPersonal: bodyPersonal,
+            listaAnotaciones: listaAnotaciones,
+            fotosProcesadas: fotosProcesadas
         };
 
-        // 4. Importar dinámicamente la plantilla
-        let renderizarPDF;
+        // 4. Importar dinámicamente la plantilla PDFMake
+        let generarDocDefinition;
         const idEmpresa = window.APP_STATE.idEmpresaUsuario || 'default';
         try {
-            // El "./" significa "busca desde donde estoy parado (afuera)", luego entra a "js", etc.
             const modulo = await import(`./js/templates/reporte_diario/${idEmpresa}.js`);
-            renderizarPDF = modulo.renderizarPDF;
+            generarDocDefinition = modulo.generarDocDefinition;
         } catch (e) {
-            console.warn(`No se encontró la plantilla ${idEmpresa}.js, usando EMP00001 como respaldo.`, e);
-            try {
-                // Ruta de respaldo también apuntando a la carpeta js
-                const modulo = await import(`./js/templates/reporte_diario/EMP00001.js`);
-                renderizarPDF = modulo.renderizarPDF;
-            } catch (fallbackError) {
-                 alert("Error crítico: No se encontró la plantilla de diseño en sus archivos locales/GitHub.");
-                 return;
-            }
+            const modulo = await import(`./js/templates/reporte_diario/EMP00001.js`);
+            generarDocDefinition = modulo.generarDocDefinition;
         }
 
-        // 5. Inyectar HTML en la pantalla
-        document.getElementById('pdfPlaceholder').classList.add('hidden');
-        const rootCont = document.getElementById('pdfContenedorRaiz');
-        rootCont.innerHTML = renderizarPDF(datosPlantilla);
-        rootCont.classList.remove('hidden');
-        rootCont.classList.add('flex'); // Asegura que los items se centren
-
-        // Habilitar botón de impresión oficial
-        const btnGuardar = document.getElementById('btnGuardarOficial');
-        btnGuardar.classList.remove('hidden');
-        btnGuardar.classList.add('flex');
+        // 5. Generar PDFMake y Visor
+        const docDefinition = generarDocDefinition(datosPlantilla);
+        const pdfDoc = pdfMake.createPdf(docDefinition);
         
-        // Cambiar lógica de guardado: Como ya no usamos PDFMake, ahora el botón mandará a imprimir desde el navegador.
-        btnGuardar.onclick = function() { window.print(); };
-        btnGuardar.innerHTML = `<span class="material-symbols-outlined">print</span> Imprimir / Guardar como PDF`;
+        pdfDoc.getBlob((blob) => {
+            pdfBlobGenerado = blob; // Guardamos el blob en memoria para la subida
+            const pdfUrl = URL.createObjectURL(blob);
+            
+            document.getElementById('pdfPlaceholder').classList.add('hidden');
+            const rootCont = document.getElementById('pdfContenedorRaiz');
+            
+            const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (esCelular) {
+                rootCont.innerHTML = `
+                    <div class="text-center p-8 bg-slate-100 rounded-xl w-full border border-slate-300 shadow-sm">
+                        <span class="material-symbols-outlined text-5xl text-corpBlue-600 mb-3">picture_as_pdf</span>
+                        <p class="text-slate-700 font-bold mb-4 text-lg">El PDF está compilado</p>
+                        <a href="${pdfUrl}" target="_blank" class="inline-block bg-corpBlue-600 text-white font-bold py-3 px-8 rounded-lg shadow-md">
+                            Visualizar Documento
+                        </a>
+                    </div>`;
+            } else {
+                rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-[650px] rounded-xl shadow-lg border border-slate-300"></iframe>`;
+            }
+            rootCont.classList.remove('hidden');
+
+            // Restaurar botón de guardado oficial
+            const btnGuardar = document.getElementById('btnGuardarOficial');
+            btnGuardar.classList.remove('hidden');
+            btnGuardar.classList.add('flex');
+            btnGuardar.onclick = window.accionGuardarPDFDefinitivo; // Restauramos la subida a Firebase
+            btnGuardar.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Generar PDF / Guardar Oficialmente`;
+        });
 
     } catch (error) {
-        console.error("Error al aplicar plantilla:", error);
+        console.error("Error al generar PDF vectorial:", error);
         alert("Error al procesar los datos: " + error.message);
     } finally {
         btn.innerHTML = origText;
         btn.disabled = false;
     }
 };
+
+// GUARDADO AUTOMÁTICO DEL BLOB A FIREBASE STORAGE
+window.accionGuardarPDFDefinitivo = async function() {
+    const fecha = document.getElementById('prevDateField').value;
+    const btn = document.getElementById('btnGuardarOficial');
+
+    if (!pdfBlobGenerado) return alert("Primero debe generar la vista previa del PDF.");
+
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">cloud_upload</span> Subiendo a Firebase...`;
+
+    try {
+        const storagePath = `reportes_pdfs/${PROJECT_ID}/${fecha}_RD_${window.APP_STATE.nombreProyecto}.pdf`;
+        const storageRef = ref(storage, storagePath);
+        
+        await uploadBytes(storageRef, pdfBlobGenerado);
+        const urlPDFDescarga = await getDownloadURL(storageRef);
+
+        const docId = fecha + "_" + PROJECT_ID;
+        const reporteRef = doc(db, "reportes_diarios", docId);
+        const partesFecha = fecha.split('-');
+        const correlativoNum = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
+
+        await setDoc(reporteRef, {
+            url_pdf_oficial: urlPDFDescarga,
+            num_registro_oficial: correlativoNum,
+            fecha_guardado_pdf: new Date().toISOString()
+        }, { merge: true });
+
+        document.getElementById('envioDateField').value = fecha;
+        window.cargarDatosMensajeria();
+
+        btn.innerHTML = "✅ PDF Guardado Oficialmente";
+        alert(`✅ PDF vectorial compilado y registrado en Firebase Storage exitosamente.`);
+
+    } catch (error) {
+        console.error("Error al guardar PDF:", error);
+        alert("Error al guardar en Storage: " + error.message);
+    } finally {
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }, 2000);
+    }
+};
+
 
 // GUARDADO AUTOMÁTICO DEL BLOB A FIREBASE STORAGE
 window.accionGuardarPDFDefinitivo = async function() {

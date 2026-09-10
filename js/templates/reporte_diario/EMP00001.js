@@ -1,91 +1,119 @@
 /**
- * Plantilla de Reporte Diario para la Empresa: EMP00001 (Haelservice)
- * 
- * @param {Object} datos - Objeto con toda la información necesaria para renderizar.
- * Propiedades esperadas: 
- * - logo, nombreEmpresa, nombreProyecto, cliente, contratista, elaboradoPor, fecha, correlativo
- * - htmlActividades, htmlPersonal, htmlAnotaciones (Strings con HTML)
- * - fotosArray (Arreglo de objetos [{url: "...", descripcion: "..."}])
+ * Plantilla PDFMake para EMP00001 (Haelservice)
  */
-export function renderizarPDF(datos) {
-    // 1. PÁGINA DE TEXTO (Actividades, Personal y Anotaciones)
-    const paginaPrincipal = `
-        <div class="pagina-a4 bg-white text-black p-8 shadow-2xl relative" style="width: 210mm; min-height: 297mm; box-sizing: border-box; font-family: Arial, sans-serif;">
-            
-            <!-- ENCABEZADO -->
-            <div style="background-color: #142538; display: flex; justify-content: space-between; align-items: center; padding: 16px;">
-                <div style="width: 33%;">
-                    ${datos.logo 
-                        ? `<img src="${datos.logo}" alt="Logo" style="max-height: 64px; object-fit: contain; background-color: rgba(255,255,255,0.1); padding: 4px; border-radius: 4px;">` 
-                        : `<div style="color: white; font-weight: bold; font-size: 1.25rem;">${datos.nombreEmpresa || ''}</div>`
-                    }
-                </div>
-                <div style="width: 66%; text-align: center; color: white;">
-                    <h1 style="font-size: 1.25rem; font-weight: 900; text-transform: uppercase; margin: 0;">Reporte Diario de Avance de Obra</h1>
-                    <p style="font-size: 0.75rem; font-weight: bold; color: #85B648; text-transform: uppercase; margin-top: 2px;">PROYECTO</p>
-                    <p style="font-size: 0.875rem; font-weight: bold; text-transform: uppercase; margin: 0;">${datos.nombreProyecto || ''}</p>
-                </div>
-            </div>
+export function generarDocDefinition(datos) {
+    const crearHeader = () => ({
+        table: {
+            widths: ['30%', '70%'],
+            body: [[
+                datos.logo ? { image: datos.logo, fit: [110, 40], alignment: 'center', margin: [0, 2, 0, 2] } : { text: datos.nombreEmpresa || '', color: 'white', bold: true, fontSize: 14, alignment: 'center', margin: [0, 10, 0, 0] },
+                {
+                    stack: [
+                        { text: 'REPORTE DIARIO DE AVANCE DE OBRA', fontSize: 11, bold: true, color: '#FFFFFF', alignment: 'center' },
+                        { text: 'PROYECTO', fontSize: 8, bold: true, color: '#85B648', alignment: 'center', margin: [0, 1, 0, 0] },
+                        { text: (datos.nombreProyecto || '').toUpperCase(), fontSize: 10, bold: true, color: '#FFFFFF', alignment: 'center' }
+                    ],
+                    margin: [0, 3, 0, 3]
+                }
+            ]]
+        },
+        layout: { fillColor: () => '#233D5C', hLineWidth: () => 0, vLineWidth: () => 0 },
+        margin: [0, 0, 0, 4]
+    });
 
-            <!-- CUADRO DE METADATOS -->
-            <div style="display: flex; border: 2px solid #1e293b; font-size: 0.75rem; margin-bottom: 24px; background-color: white;">
-                <div style="width: 66.66%; padding: 8px; border-right: 2px solid #1e293b;">
-                    <div style="margin-bottom: 4px;"><span style="font-weight: bold;">CLIENTE:</span> ${datos.cliente || '-'}</div>
-                    <div style="margin-bottom: 4px;"><span style="font-weight: bold;">CONTRATISTA:</span> ${datos.contratista || '-'}</div>
-                    <div><span style="font-weight: bold;">ELABORADO POR:</span> ${datos.elaboradoPor || '-'}</div>
-                </div>
-                <div style="width: 33.33%; padding: 8px; display: flex; flex-direction: column; justify-content: center; background-color: #f8fafc;">
-                    <div style="margin-bottom: 4px;"><span style="font-weight: bold;">FECHA:</span> ${datos.fecha || '-'}</div>
-                    <div><span style="font-weight: bold;">N° REGISTRO:</span> <span style="color: #dc2626; font-weight: 900;">${datos.correlativo || '-'}</span></div>
-                </div>
-            </div>
+    const crearMetadata = () => ({
+        table: {
+            widths: ['65%', '35%'],
+            body: [[
+                {
+                    stack: [
+                        { text: [{ text: 'CLIENTE: ', bold: true }, (datos.cliente || '').toUpperCase()] },
+                        { text: [{ text: 'CONTRATISTA: ', bold: true }, (datos.contratista || '').toUpperCase()] },
+                        { text: [{ text: 'ELABORADO POR: ', bold: true }, (datos.elaboradoPor || '').toUpperCase()] }
+                    ],
+                    fontSize: 8, margin: [2, 2, 2, 2]
+                },
+                {
+                    stack: [
+                        { text: [{ text: 'FECHA: ', bold: true }, datos.fecha] },
+                        { text: [{ text: 'N° REGISTRO: ', bold: true }, { text: datos.correlativo, color: '#DC2626', bold: true }] }
+                    ],
+                    fontSize: 8, margin: [2, 2, 2, 2]
+                }
+            ]]
+        },
+        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
+        margin: [0, 0, 0, 8]
+    });
 
-            <!-- CONTENIDO DE TEXTO -->
-            <div style="margin-bottom: 16px;">${datos.htmlActividades || ''}</div>
-            <div style="margin-bottom: 16px;">${datos.htmlPersonal || ''}</div>
-            <div style="margin-bottom: 16px;">${datos.htmlAnotaciones || ''}</div>
-        </div>
-    `;
+    const makeSectionTitle = (title) => ({
+        table: {
+            widths: ['*'],
+            body: [[{ text: title.toUpperCase(), fontSize: 8, bold: true, color: '#233D5C' }]]
+        },
+        layout: { fillColor: () => '#E2E8F0', hLineWidth: () => 0, vLineWidth: (i) => (i === 0 ? 3 : 0), vLineColor: () => '#233D5C' },
+        margin: [0, 4, 0, 4]
+    });
 
-    // 2. GENERAR PÁGINAS DE FOTOS DINÁMICAS (Máximo 6 por página)
-    let paginasFotosHTML = '';
-    const listaFotos = datos.fotosArray || []; 
+    const docContent = [
+        crearHeader(),
+        crearMetadata(),
+        makeSectionTitle('1. Actividades Realizadas'),
+        datos.listaActividades.length > 0 ? { ul: datos.listaActividades, margin: [10, 0, 0, 5] } : { text: 'Sin actividades registradas.', fontSize: 8, italic: true },
+        makeSectionTitle('2. Distribución de Personal y Frentes de Trabajo'),
+        {
+            table: { widths: [25, '*', '*', 60], body: datos.bodyPersonal },
+            layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
+            margin: [0, 2, 0, 5]
+        },
+        makeSectionTitle('3. Anotaciones del Día / Observaciones'),
+        datos.listaAnotaciones.length > 0 ? { ul: datos.listaAnotaciones, margin: [10, 0, 0, 5] } : { text: 'Sin anotaciones registradas.', fontSize: 8, italic: true }
+    ];
 
-    if (listaFotos.length > 0) {
-        const TAMANO_BLOQUE = 6;
-        
-        for (let i = 0; i < listaFotos.length; i += TAMANO_BLOQUE) {
-            const bloqueFotos = listaFotos.slice(i, i + TAMANO_BLOQUE);
-            
-            const fotosGridHTML = bloqueFotos.map(foto => `
-                <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; background-color: #f8fafc; text-align: center;">
-                    <img src="${foto.url}" style="width: 100%; height: 160px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;">
-                    <p style="font-size: 10px; color: #334155; margin: 0; font-weight: 600;">${foto.descripcion || 'Sin descripción'}</p>
-                </div>
-            `).join('');
+    if (datos.fotosProcesadas.length > 0) {
+        docContent.push({ text: '', pageBreak: 'before' });
+        docContent.push(crearHeader());
+        docContent.push(crearMetadata());
+        docContent.push(makeSectionTitle('Registro Fotográfico y Actividades de Obra'));
 
-            paginasFotosHTML += `
-                <div class="pagina-a4 bg-white text-black p-8 shadow-2xl relative mt-8" style="width: 210mm; min-height: 297mm; box-sizing: border-box; font-family: Arial, sans-serif; page-break-before: always;">
-                    
-                    <!-- ENCABEZADO DE ANEXO FOTOGRÁFICO -->
-                    <div style="background-color: #142538; display: flex; justify-content: space-between; align-items: center; padding: 16px; margin-bottom: 16px;">
-                        <div style="width: 33%;">
-                            ${datos.logo ? `<img src="${datos.logo}" alt="Logo" style="max-height: 64px; object-fit: contain;">` : ''}
-                        </div>
-                        <div style="width: 66%; text-align: center; color: white;">
-                            <h1 style="font-size: 1.25rem; font-weight: 900; text-transform: uppercase; margin: 0;">Anexo Fotográfico</h1>
-                            <p style="font-size: 0.75rem; font-weight: bold; color: #85B648; text-transform: uppercase; margin-top: 2px;">PROYECTO: ${datos.nombreProyecto || ''}</p>
-                        </div>
-                    </div>
+        const photoColumns = [];
+        for (let i = 0; i < datos.fotosProcesadas.length; i += 2) {
+            const f1 = datos.fotosProcesadas[i];
+            const f2 = datos.fotosProcesadas[i + 1];
 
-                    <!-- CUADRÍCULA DE FOTOS (2 columnas x 3 filas) -->
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
-                        ${fotosGridHTML}
-                    </div>
-                </div>
-            `;
+            const rowCols = [
+                {
+                    stack: [{
+                        table: { widths: ['*'], body: [
+                            [{ image: f1.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
+                            [{ text: `${i + 1}. ${f1.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
+                        ]},
+                        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
+                    }], width: '50%'
+                }
+            ];
+
+            if (f2) {
+                rowCols.push({
+                    stack: [{
+                        table: { widths: ['*'], body: [
+                            [{ image: f2.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
+                            [{ text: `${i + 2}. ${f2.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
+                        ]},
+                        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
+                    }], width: '50%'
+                });
+            } else {
+                rowCols.push({ text: '', width: '50%' });
+            }
+            photoColumns.push({ columns: rowCols, columnGap: 14, margin: [0, 0, 0, 12] });
         }
+        docContent.push(...photoColumns);
     }
 
-    return paginaPrincipal + paginasFotosHTML;
+    return {
+        pageSize: 'A4',
+        pageMargins: [25, 25, 25, 25],
+        content: docContent
+    };
 }
