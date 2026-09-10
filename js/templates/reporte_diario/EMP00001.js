@@ -1,6 +1,6 @@
 /**
  * Plantilla PDFMake para EMP00001 (Haelservice)
- * Incluye repetición automática de títulos de sección en saltos de página
+ * Repetición garantizada de títulos de sección en saltos de página
  */
 export function generarDocDefinition(datos) {
     // 1. Estructura de Encabezado (Encabezado Azul)
@@ -51,61 +51,75 @@ export function generarDocDefinition(datos) {
         margin: [0, 0, 0, 0]
     });
 
-    // Función para crear bloques con títulos que se repiten en saltos de página
-    const crearBloqueSeccion = (titulo, contenidoObj) => ({
-        table: {
-            headerRows: 1, // Hace que la fila 0 (el título) se repita si el bloque salta de página
-            widths: ['*'],
-            body: [
-                [{ text: titulo.toUpperCase(), fontSize: 8, bold: true, color: '#233D5C', fillColor: '#E2E8F0' }],
-                [contenidoObj]
-            ]
-        },
-        layout: {
-            hLineWidth: () => 0,
-            vLineWidth: (i) => (i === 0 ? 3 : 0),
-            vLineColor: () => '#233D5C'
-        },
-        margin: [0, 4, 0, 4]
-    });
+    // Función que transforma cada ítem en una FILA INDEPENDIENTE para forzar la repetición del título
+    const crearTablaLista = (titulo, listaItems, textoVacio) => {
+        const body = [
+            [{ text: titulo.toUpperCase(), fontSize: 8, bold: true, color: '#233D5C', fillColor: '#E2E8F0' }]
+        ];
+
+        if (listaItems && listaItems.length > 0) {
+            listaItems.forEach(item => {
+                body.push([{ ul: [item], margin: [5, 1, 5, 1] }]);
+            });
+        } else {
+            body.push([{ text: textoVacio, fontSize: 8, italic: true, margin: [5, 2, 5, 2] }]);
+        }
+
+        return {
+            table: {
+                headerRows: 1, // Obliga a PDFMake a repetir la Fila 0 (Título) en caso de salto de página
+                dontBreakRows: true, // Evita que una sola viñeta se corte feo a la mitad
+                widths: ['*'],
+                body: body
+            },
+            layout: {
+                hLineWidth: () => 0,
+                vLineWidth: (i) => (i === 0 ? 3 : 0),
+                vLineColor: () => '#233D5C'
+            },
+            margin: [0, 4, 0, 4]
+        };
+    };
+
+    // Estructura de Personal con título integrado como Fila 0
+    const bodyPersonalConTitulo = [
+        [{ text: '2. DISTRIBUCIÓN DE PERSONAL Y FRENTES DE TRABAJO', colSpan: 4, fontSize: 8, bold: true, color: '#233D5C', fillColor: '#E2E8F0', margin: [2, 2, 2, 2] }, {}, {}, {}],
+        ...(datos.bodyPersonal || [])
+    ];
 
     // 3. Contenido Principal de Texto
     const docContent = [
-        // Seccion 1: Actividades
-        crearBloqueSeccion('1. Actividades Realizadas', 
-            datos.listaActividades.length > 0 
-                ? { ul: datos.listaActividades, margin: [5, 2, 5, 2] } 
-                : { text: 'Sin actividades registradas.', fontSize: 8, italic: true, margin: [5, 2, 5, 2] }
-        ),
+        // Sección 1: Actividades
+        crearTablaLista('1. Actividades Realizadas', datos.listaActividades, 'Sin actividades registradas.'),
 
-        // Seccion 2: Personal (La tabla de personal repite sus propios encabezados N°, Rubro, etc.)
-        crearBloqueSeccion('2. Distribución de Personal y Frentes de Trabajo',
-            {
-                table: { 
-                    headerRows: 1,
-                    widths: [25, '*', '*', 60], 
-                    body: datos.bodyPersonal 
-                },
-                layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
-                margin: [0, 2, 0, 2]
-            }
-        ),
+        // Sección 2: Personal (Repite título y cabecera de columnas N°/Rubro si se corta)
+        {
+            table: {
+                headerRows: 2, // Repite Fila 0 (Título) y Fila 1 (N°, RUBRO, SECTOR, CANTIDAD)
+                dontBreakRows: true,
+                widths: [25, '*', '*', 60],
+                body: bodyPersonalConTitulo
+            },
+            layout: {
+                hLineWidth: () => 1,
+                vLineWidth: (i) => (i === 0 ? 3 : 1),
+                hLineColor: () => '#1E293B',
+                vLineColor: (i) => (i === 0 ? '#233D5C' : '#1E293B')
+            },
+            margin: [0, 4, 0, 4]
+        },
 
-        // Seccion 3: Anotaciones (Si se divide, repetirá "3. ANOTACIONES DEL DÍA / OBSERVACIONES" arriba)
-        crearBloqueSeccion('3. Anotaciones del Día / Observaciones',
-            datos.listaAnotaciones.length > 0 
-                ? { ul: datos.listaAnotaciones, margin: [5, 2, 5, 2] } 
-                : { text: 'Sin anotaciones registradas.', fontSize: 8, italic: true, margin: [5, 2, 5, 2] }
-        )
+        // Sección 3: Anotaciones
+        crearTablaLista('3. Anotaciones del Día / Observaciones', datos.listaAnotaciones, 'Sin anotaciones registradas.')
     ];
 
-    // 4. Bloque de Fotos (Estricto 6 por página, con salto antes de iniciar el anexo)
+    // 4. Bloque de Fotos (Estricto 6 por página)
     const FOTOS_POR_PAGINA = 6;
     for (let offset = 0; offset < datos.fotosProcesadas.length; offset += FOTOS_POR_PAGINA) {
         const bloqueFotos = datos.fotosProcesadas.slice(offset, offset + FOTOS_POR_PAGINA);
 
         docContent.push({ text: '', pageBreak: 'before' });
-        
+
         const photoColumns = [];
         for (let i = 0; i < bloqueFotos.length; i += 2) {
             const f1 = bloqueFotos[i];
@@ -141,9 +155,22 @@ export function generarDocDefinition(datos) {
             photoColumns.push({ columns: rowCols, columnGap: 12, margin: [0, 0, 0, 8] });
         }
 
-        docContent.push(
-            crearBloqueSeccion('Registro Fotográfico y Actividades de Obra', { stack: photoColumns, margin: [0, 2, 0, 2] })
-        );
+        docContent.push({
+            table: {
+                headerRows: 1,
+                widths: ['*'],
+                body: [
+                    [{ text: 'REGISTRO FOTOGRÁFICO Y ACTIVIDADES DE OBRA', fontSize: 8, bold: true, color: '#233D5C', fillColor: '#E2E8F0' }],
+                    [{ stack: photoColumns, margin: [0, 2, 0, 2] }]
+                ]
+            },
+            layout: {
+                hLineWidth: () => 0,
+                vLineWidth: (i) => (i === 0 ? 3 : 0),
+                vLineColor: () => '#233D5C'
+            },
+            margin: [0, 4, 0, 4]
+        });
     }
 
     // 5. Definición final con membrete global
