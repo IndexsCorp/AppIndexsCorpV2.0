@@ -1265,23 +1265,28 @@ window.cargarDatosMensajeria = async function() {
     const partesFecha = fecha.split('-');
     if (partesFecha.length !== 3) return;
 
-    const btn = document.querySelector('button[onclick="cargarDatosMensajeria()"]');
-    const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">sync</span> Cargando...`;
-    btn.disabled = true;
+    // Búsqueda flexible del botón para evitar fallos si cambia la firma del onclick
+    const btn = document.querySelector('button[onclick*="cargarDatosMensajeria"]');
+    const origText = btn ? btn.innerHTML : '';
+    
+    if (btn) {
+        btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">sync</span> Cargando...`;
+        btn.disabled = true;
+    }
 
     const fechaFmt = `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0]}`;
     const correlativo = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
     const projName = window.APP_STATE.nombreProyecto || PROJECT_ID;
 
-    // Llenar Asunto
+    // 1. Llenar Asunto
     document.getElementById('envioAsunto').value = `REPORTE DIARIO DE OBRA - ${projName} - N° ${correlativo} (${fechaFmt})`;
 
-    // Llenar Para y CC (Cambiando ';' por ',' para evitar errores en el cliente de correo)
+    // 2. Llenar Para y CC (Limpiando formatos de correos)
     const formatEmails = (str) => str.replace(/;/g, ',').replace(/\s+/g, '');
     document.getElementById('envioPara').value = window.APP_STATE.correosPara ? formatEmails(window.APP_STATE.correosPara) : "";
     document.getElementById('envioCc').value = window.APP_STATE.correosCC ? formatEmails(window.APP_STATE.correosCC) : "";
 
+    // 3. Consultar PDF oficial guardado en Firestore
     let linkDescarga = "⚠️ (El PDF aún no ha sido generado/guardado en la pestaña PDF)";
 
     try {
@@ -1298,11 +1303,13 @@ window.cargarDatosMensajeria = async function() {
         console.warn("No se pudo obtener el PDF oficial de Firestore:", e);
     }
 
-    // Llenar Cuerpo
+    // 4. Llenar Cuerpo
     document.getElementById('envioCuerpo').value = `Buenas tardes estimados,\n\nSe remite el Reporte Diario de Avance de Obra correspondiente a la fecha ${fechaFmt} para el proyecto ${projName}.\n\nPuede visualizar y descargar el documento oficial (PDF) desde el siguiente enlace seguro:\n${linkDescarga}\n\nQuedamos atentos a cualquier duda u observación.\n\nAtentamente,`;
 
-    btn.innerHTML = origText;
-    btn.disabled = false;
+    if (btn) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+    }
 };
 
 window.accionEnviarCorreoDefinitivo = async function(proveedor) {
