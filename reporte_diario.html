@@ -36,7 +36,7 @@
         input[type=number] { -moz-appearance: textfield; appearance: textfield; }
         input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
-        /* REGLAS DE IMPRESIÓN PDF */
+        /* REGLAS DE IMPRESIÓN PDF (Para cuando se inyecte la plantilla HTML) */
         @media print {
             body * { visibility: hidden; }
             #pdfContenedorRaiz, #pdfContenedorRaiz * { visibility: visible; }
@@ -48,10 +48,17 @@
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans overflow-x-hidden min-h-screen flex flex-col">
 
-    <!-- BARRA SUPERIOR -->
-    <nav id="navbar-global" class="bg-corpBlue-600 text-white px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-md">
+    <!-- PANTALLA DE CARGA GLOBAL -->
+    <div id="pantalla-carga" class="fixed inset-0 bg-slate-100 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+        <img src="./logo_app.png" alt="Logo App" class="h-12 object-contain mb-6 animate-pulse">
+        <span class="material-symbols-outlined text-3xl text-corpBlue-500 animate-spin">refresh</span>
+        <p class="text-xs text-slate-400 mt-3 font-medium uppercase tracking-wider">Verificando sesión...</p>
+    </div>
+
+    <!-- BARRA SUPERIOR (Oculta hasta verificar sesión) -->
+    <nav id="navbar-global" class="hidden bg-corpBlue-600 text-white px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-md">
         <div class="flex items-center gap-4">
-            <button onclick="toggleSidebar()" class="hover:bg-corpBlue-500 p-1 rounded transition flex items-center justify-center">
+            <button onclick="window.toggleSidebar()" class="hover:bg-corpBlue-500 p-1 rounded transition flex items-center justify-center">
                 <span class="material-symbols-outlined text-2xl">menu</span>
             </button>
             <span class="text-lg font-bold flex items-center gap-2">
@@ -63,38 +70,29 @@
             <a href="index.html" class="hidden md:flex items-center gap-2 bg-corpBlue-700 hover:bg-corpBlue-800 px-3 py-1.5 rounded-lg text-sm font-bold transition border border-corpBlue-500">
                 <span class="material-symbols-outlined text-[18px]">arrow_back</span> Portal
             </a>
-            <button onclick="toggleUserMenu()" id="nav-user-initials" class="w-9 h-9 bg-corpBlue-50 text-corpBlue-600 rounded-full font-bold flex items-center justify-center hover:bg-white transition shadow-sm">
+            <button onclick="window.toggleUserMenu()" id="nav-user-initials" class="w-9 h-9 bg-corpBlue-50 text-corpBlue-600 rounded-full font-bold flex items-center justify-center hover:bg-white transition shadow-sm">
                 --
             </button>
             <div id="user-menu" class="hidden absolute right-0 top-12 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 overflow-hidden z-50">
                 <div class="px-4 py-3 border-b border-slate-100">
                     <p id="dropdown-user-name" class="text-sm font-bold text-slate-800">Cargando...</p>
+                    <p id="dropdown-user-rol" class="text-xs text-slate-500 truncate">Rol</p>
                 </div>
                 <a href="https://wa.me/51922442738" target="_blank" class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition">
                     <span class="material-symbols-outlined text-[20px]">help</span> Soporte
                 </a>
                 <div class="border-t border-slate-100"></div>
-                <a href="index.html?logout=true" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
+                <button id="btn-logout" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
                     <span class="material-symbols-outlined text-[20px]">logout</span> Cerrar Sesión
-                </a>
+                </button>
             </div>
         </div>
     </nav>
 
-    <!-- SIDEBAR -->
-    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-40 transition-opacity" onclick="toggleSidebar()"></div>
+    <!-- SIDEBAR DINÁMICO -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-40 transition-opacity" onclick="window.toggleSidebar()"></div>
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 flex flex-col">
-        <div class="p-6 flex flex-col items-center justify-center border-b border-slate-100 bg-slate-50 h-32">
-            <img id="sidebar-logo" src="" alt="Logo Empresa" class="h-10 w-auto object-contain mb-3">
-            <h2 class="font-bold text-slate-800 text-lg">Reporte Diario</h2>
-            <h3 id="sidebar-project-name" class="text-xs font-bold text-slate-500 uppercase tracking-wide">Cargando Proyecto...</h3>
-        </div>
-        <div class="p-4 flex-grow overflow-y-auto mt-2">
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Navegación</p>
-            <a href="index.html" class="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-corpBlue-600 bg-corpBlue-50 hover:bg-corpBlue-100 rounded-lg transition mb-2">
-                <span class="material-symbols-outlined">business_center</span> Mis Proyectos
-            </a>
-        </div>
+        <!-- El contenido del menú se inyectará automáticamente aquí desde sidebar.js -->
     </aside>
 
     <!-- MODAL DE CONFIGURACIÓN DE RUBROS Y FRENTES -->
@@ -102,12 +100,12 @@
         <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
             <div class="bg-indigo-700 text-white px-5 py-4 flex justify-between items-center">
                 <h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">database</span> Añadir a Configuración</h3>
-                <button onclick="toggleModalConfig()" class="hover:bg-indigo-600 p-1 rounded-full"><span class="material-symbols-outlined">close</span></button>
+                <button onclick="window.toggleModalConfig()" class="hover:bg-indigo-600 p-1 rounded-full"><span class="material-symbols-outlined">close</span></button>
             </div>
             <div class="p-5 space-y-4">
                 <div>
                     <label class="block text-sm font-semibold mb-2">¿Qué deseas añadir?</label>
-                    <select id="modalTipo" class="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50 outline-none focus:border-indigo-500" onchange="toggleModalFields()">
+                    <select id="modalTipo" class="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50 outline-none focus:border-indigo-500" onchange="window.toggleModalFields()">
                         <option value="rubro">Rubro</option>
                         <option value="frente">Frente de Trabajo</option>
                     </select>
@@ -132,8 +130,8 @@
                 </div>
             </div>
             <div class="bg-slate-50 px-5 py-4 border-t border-slate-100 flex justify-end gap-3">
-                <button onclick="toggleModalConfig()" class="px-4 py-2 font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100">Cancelar</button>
-                <button id="btnGuardarConfig" onclick="guardarNuevaConfiguracion()" class="px-4 py-2 font-bold text-white bg-indigo-700 rounded-lg hover:bg-indigo-800 flex items-center gap-2">
+                <button onclick="window.toggleModalConfig()" class="px-4 py-2 font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100">Cancelar</button>
+                <button id="btnGuardarConfig" onclick="window.guardarNuevaConfiguracion()" class="px-4 py-2 font-bold text-white bg-indigo-700 rounded-lg hover:bg-indigo-800 flex items-center gap-2">
                     Agregar <span class="material-symbols-outlined text-sm">add</span>
                 </button>
             </div>
@@ -145,7 +143,7 @@
         <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div class="bg-corpBlue-600 text-white px-5 py-4 flex justify-between items-center shadow-md z-10">
                 <h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">photo_library</span> Fotos de hoy en el Proyecto</h3>
-                <button onclick="toggleModalFotosDia()" class="hover:bg-corpBlue-500 p-1 rounded-full transition"><span class="material-symbols-outlined">close</span></button>
+                <button onclick="window.toggleModalFotosDia()" class="hover:bg-corpBlue-500 p-1 rounded-full transition"><span class="material-symbols-outlined">close</span></button>
             </div>
             <div class="p-5 overflow-y-auto flex-grow bg-slate-100">
                 <p class="text-xs text-slate-500 font-semibold mb-4 text-center">Selecciona una imagen para vincularla a la actividad actual sin volver a subirla.</p>
@@ -156,25 +154,25 @@
                 </div>
             </div>
             <div class="bg-white px-5 py-4 border-t border-slate-200 flex justify-end">
-                <button onclick="toggleModalFotosDia()" class="px-5 py-2.5 font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition">Cancelar</button>
+                <button onclick="window.toggleModalFotosDia()" class="px-5 py-2.5 font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition">Cancelar</button>
             </div>
         </div>
     </div>
 
-    <!-- CONTENIDO PRINCIPAL -->
-    <main class="flex-grow p-4 max-w-4xl mx-auto w-full mt-2">
+    <!-- CONTENIDO PRINCIPAL (Oculto hasta verificar sesión) -->
+    <main id="main-content" class="hidden flex-grow p-4 max-w-4xl mx-auto w-full mt-2">
         <!-- TABS -->
         <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
-            <button onclick="switchTab('ingresar')" id="btnTabIngresar" class="tab-btn active flex-1 bg-corpBlue-600 text-white border-corpBlue-600 border rounded-lg py-2.5 px-4 font-bold text-sm shadow-md transition whitespace-nowrap flex justify-center items-center gap-2">
+            <button onclick="window.switchTab('ingresar')" id="btnTabIngresar" class="tab-btn active flex-1 bg-corpBlue-600 text-white border-corpBlue-600 border rounded-lg py-2.5 px-4 font-bold text-sm shadow-md transition whitespace-nowrap flex justify-center items-center gap-2">
                 <span class="material-symbols-outlined text-lg">edit_document</span> Ingresar
             </button>
-            <button onclick="switchTab('modificar')" id="btnTabModificar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+            <button onclick="window.switchTab('modificar')" id="btnTabModificar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
                 <span class="material-symbols-outlined text-lg">manage_search</span> Modificar
             </button>
-            <button onclick="switchTab('previsualizar')" id="btnTabPrevisualizar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+            <button onclick="window.switchTab('previsualizar')" id="btnTabPrevisualizar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
                 <span class="material-symbols-outlined text-lg">picture_as_pdf</span> PDF
             </button>
-            <button onclick="switchTab('enviar')" id="btnTabEnviar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+            <button onclick="window.switchTab('enviar')" id="btnTabEnviar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
                 <span class="material-symbols-outlined text-lg">forward_to_inbox</span> Enviar
             </button>
         </div>
@@ -193,7 +191,7 @@
             <div class="mb-8">
                 <h4 class="text-base font-bold text-corpBlue-600 flex items-center gap-2 mb-3"><span class="material-symbols-outlined text-[20px]">list_alt</span> Actividades Realizadas</h4>
                 <div id="actividadesContainer" class="space-y-4"></div>
-                <button type="button" class="w-full mt-4 bg-corpBlue-50 hover:bg-corpBlue-100 text-corpBlue-600 border border-dashed border-corpBlue-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2" onclick="addActividadRow()">
+                <button type="button" class="w-full mt-4 bg-corpBlue-50 hover:bg-corpBlue-100 text-corpBlue-600 border border-dashed border-corpBlue-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2" onclick="window.addActividadRow()">
                     <span class="material-symbols-outlined text-lg">add</span> Añadir Actividad
                 </button>
             </div>
@@ -204,22 +202,22 @@
                     <h4 class="text-base font-bold text-indigo-700 flex items-center gap-2">
                         <span class="material-symbols-outlined text-[20px]">groups</span> Personal y Frentes
                     </h4>
-                    <button type="button" onclick="recargarSelectsManual(this)" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition shadow-sm">
+                    <button type="button" onclick="window.recargarSelectsManual(this)" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition shadow-sm">
                         <span class="material-symbols-outlined text-[16px]">refresh</span> Actualizar
                     </button>
                 </div>
                 <div id="personnelContainer" class="space-y-4"></div>
                 
                 <div class="flex gap-2 mb-4 mt-4">
-                    <button type="button" class="w-2/3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-dashed border-indigo-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2" onclick="addPersonnelRow()">
+                    <button type="button" class="w-2/3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-dashed border-indigo-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2" onclick="window.addPersonnelRow()">
                         <span class="material-symbols-outlined text-lg">add</span> Añadir Personal
                     </button>
-                    <button type="button" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg transition border border-slate-300 flex justify-center items-center gap-2" onclick="toggleModalConfig()">
+                    <button type="button" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg transition border border-slate-300 flex justify-center items-center gap-2" onclick="window.toggleModalConfig()">
                         <span class="material-symbols-outlined text-lg">settings</span> Rubros
                     </button>
                 </div>
 
-                <button type="button" id="btnPersonal" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition" onclick="submitPersonal()">
+                <button type="button" id="btnPersonal" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition" onclick="window.submitPersonal()">
                     Guardar Personal <span class="material-symbols-outlined text-lg">save</span>
                 </button>
             </div>
@@ -228,10 +226,10 @@
             <div class="border-t border-slate-100 pt-6">
                 <h4 class="text-base font-bold text-amber-600 flex items-center gap-2 mb-4"><span class="material-symbols-outlined text-[20px]">comment</span> Anotaciones</h4>
                 <div id="anotacionesContainer" class="space-y-4"></div>
-                <button type="button" class="w-full mt-4 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-dashed border-amber-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2 mb-4" onclick="addAnotacionRow()">
+                <button type="button" class="w-full mt-4 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-dashed border-amber-300 font-bold py-2.5 rounded-lg transition flex justify-center items-center gap-2 mb-4" onclick="window.addAnotacionRow()">
                     <span class="material-symbols-outlined text-lg">add</span> Añadir Anotación
                 </button>
-                <button type="button" id="btnAnotaciones" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition" onclick="submitAnotaciones()">
+                <button type="button" id="btnAnotaciones" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition" onclick="window.submitAnotaciones()">
                     Guardar Anotaciones <span class="material-symbols-outlined text-lg">save</span>
                 </button>
             </div>
@@ -247,7 +245,7 @@
                     <label class="block text-sm font-semibold mb-1">Fecha a buscar:</label>
                     <input type="date" id="editDateField" class="w-full p-2.5 border rounded-lg bg-white outline-none">
                 </div>
-                <button type="button" onclick="buscarReporteEdicion()" class="w-full sm:w-1/3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition">
+                <button type="button" onclick="window.buscarReporteEdicion()" class="w-full sm:w-1/3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition">
                     <span class="material-symbols-outlined text-lg">search</span> Buscar
                 </button>
             </div>
@@ -271,7 +269,7 @@
                     <label class="block text-sm font-semibold mb-1 text-slate-700">Elaborado por:</label>
                     <input type="text" id="pdfFirma" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500" placeholder="Ej: ING. CHRISTIAN SUÁREZ">
                 </div>
-                <button type="button" id="btnGenerarPrev" onclick="accionGenerarPrevisualizacion()" class="w-full lg:w-1/3 bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
+                <button type="button" id="btnGenerarPrev" onclick="window.accionGenerarPrevisualizacion()" class="w-full lg:w-1/3 bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
                     <span class="material-symbols-outlined text-lg">magic_button</span> Generar Vista
                 </button>
             </div>
@@ -280,76 +278,12 @@
                 <span>Seleccione una fecha y genere la vista previa.</span>
             </div>
 
-            <!-- CONTENEDOR DE PÁGINAS A4 INDEPENDIENTES -->
+            <!-- CONTENEDOR VACÍO PARA RECIBIR LA PLANTILLA EXTERNA -->
             <div id="pdfContenedorRaiz" class="hidden flex-col items-center gap-8 bg-slate-400 p-4 md:p-8 rounded-xl shadow-inner mb-6 overflow-x-auto">
-                
-                <!-- PÁGINA 1: DATOS, ACTIVIDADES Y PERSONAL -->
-                <div id="pdfPagina1" class="pagina-a4 bg-white text-black p-8 shadow-2xl relative" style="width: 210mm; min-height: 297mm; box-sizing: border-box; font-family: Arial, sans-serif;">
-                    
-                    <!-- ENCABEZADO Y METADATA -->
-                    <div class="header-blue bg-corpBlue-800 text-white p-4 flex justify-between items-center mb-0">
-                        <div class="w-1/3">
-                            <img id="pdfLogo" src="" alt="Logo" class="max-h-16 object-contain bg-white/10 p-1 rounded">
-                        </div>
-                        <div class="w-2/3 text-center">
-                            <h1 class="text-xl font-black uppercase tracking-wide">Reporte Diario de Avance de Obra</h1>
-                            <p class="text-xs font-bold text-corpGreen uppercase tracking-widest mt-0.5">PROYECTO</p>
-                            <p id="pdfProyecto" class="text-sm font-bold uppercase tracking-wider"></p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-12 border-2 border-slate-800 text-xs mb-6 bg-white">
-                        <div class="col-span-8 p-2 space-y-1 border-r-2 border-slate-800">
-                            <div><span class="font-bold text-slate-700">CLIENTE:</span> <span id="pdfCliente" class="font-semibold uppercase ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">CONTRATISTA:</span> <span id="pdfContratista" class="font-semibold uppercase ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">ELABORADO POR:</span> <span id="pdfElaboradoPor" class="font-bold uppercase ml-1"></span></div>
-                        </div>
-                        <div class="col-span-4 p-2 space-y-1 flex flex-col justify-center bg-slate-50">
-                            <div><span class="font-bold text-slate-700">FECHA:</span> <span id="pdfFecha" class="font-bold ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">N° REGISTRO:</span> <span id="pdfCorrelativo" class="font-black text-red-600 text-sm ml-1"></span></div>
-                        </div>
-                    </div>
-
-                    <!-- BLOQUES DE CONTENIDO PÁGINA 1 -->
-                    <div id="pdfActividadesContenedor" class="mb-4"></div>
-                    <div id="pdfPersonalContenedor" class="mb-4"></div>
-                    <div id="pdfAnotacionesContenedor" class="mb-4"></div>
-                </div>
-
-                <!-- PÁGINA 2: ANEXO FOTOGRÁFICO (MÁXIMO 6 FOTOS 2x3) -->
-                <div id="pdfPagina2" class="pagina-a4 bg-white text-black p-8 shadow-2xl relative hidden" style="width: 210mm; min-height: 297mm; box-sizing: border-box; font-family: Arial, sans-serif;">
-                    
-                    <!-- ENCABEZADO REPETIDO PÁGINA 2 -->
-                    <div class="header-blue bg-corpBlue-800 text-white p-4 flex justify-between items-center mb-0">
-                        <div class="w-1/3">
-                            <img id="pdfLogoPag2" src="" alt="Logo" class="max-h-16 object-contain bg-white/10 p-1 rounded">
-                        </div>
-                        <div class="w-2/3 text-center">
-                            <h1 class="text-xl font-black uppercase tracking-wide">Reporte Diario de Avance de Obra</h1>
-                            <p class="text-xs font-bold text-corpGreen uppercase tracking-widest mt-0.5">PROYECTO</p>
-                            <p id="pdfProyectoPag2" class="text-sm font-bold uppercase tracking-wider"></p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-12 border-2 border-slate-800 text-xs mb-6 bg-white">
-                        <div class="col-span-8 p-2 space-y-1 border-r-2 border-slate-800">
-                            <div><span class="font-bold text-slate-700">CLIENTE:</span> <span id="pdfClientePag2" class="font-semibold uppercase ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">CONTRATISTA:</span> <span id="pdfContratistaPag2" class="font-semibold uppercase ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">ELABORADO POR:</span> <span id="pdfElaboradoPorPag2" class="font-bold uppercase ml-1"></span></div>
-                        </div>
-                        <div class="col-span-4 p-2 space-y-1 flex flex-col justify-center bg-slate-50">
-                            <div><span class="font-bold text-slate-700">FECHA:</span> <span id="pdfFechaPag2" class="font-bold ml-1"></span></div>
-                            <div><span class="font-bold text-slate-700">N° REGISTRO:</span> <span id="pdfCorrelativoPag2" class="font-black text-red-600 text-sm ml-1"></span></div>
-                        </div>
-                    </div>
-
-                    <!-- FOTOS PÁGINA 2 -->
-                    <div id="pdfFotosContenedor"></div>
-                </div>
-
+                <!-- La plantilla HTML específica de la empresa se inyectará aquí desde JS -->
             </div>
             
-            <button type="button" id="btnGuardarOficial" class="hidden w-full bg-corpGreen hover:bg-corpGreen-hover text-white font-bold py-3.5 rounded-xl justify-center items-center gap-2 transition shadow-md" onclick="accionGuardarPDFDefinitivo()">
+            <button type="button" id="btnGuardarOficial" class="hidden w-full bg-corpGreen hover:bg-corpGreen-hover text-white font-bold py-3.5 rounded-xl justify-center items-center gap-2 transition shadow-md" onclick="window.accionGuardarPDFDefinitivo()">
                 <span class="material-symbols-outlined">print</span> Generar PDF / Imprimir Oficial
             </button>
         </div>
@@ -364,7 +298,7 @@
                     <label class="block text-sm font-semibold mb-1">Fecha del Reporte a Enviar:</label>
                     <input type="date" id="envioDateField" class="w-full p-2.5 border rounded-lg bg-slate-50 outline-none">
                 </div>
-                <button type="button" onclick="cargarDatosMensajeria()" class="w-full sm:w-1/3 bg-slate-800 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2">
+                <button type="button" onclick="window.cargarDatosMensajeria()" class="w-full sm:w-1/3 bg-slate-800 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2">
                     <span class="material-symbols-outlined text-lg">sync</span> Cargar
                 </button>
             </div>
@@ -389,13 +323,13 @@
             <div class="mt-6">
                 <label class="block text-sm font-semibold mb-2 text-slate-700 text-center">Seleccione la plataforma para despachar:</label>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button type="button" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="accionEnviarCorreoDefinitivo('gmail')">
+                    <button type="button" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivo('gmail')">
                         <span class="material-symbols-outlined">mail</span> Gmail Web
                     </button>
-                    <button type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="accionEnviarCorreoDefinitivo('outlook')">
+                    <button type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivo('outlook')">
                         <span class="material-symbols-outlined">forward_to_inbox</span> Outlook Web
                     </button>
-                    <button type="button" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="accionEnviarCorreoDefinitivo('default')">
+                    <button type="button" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivo('default')">
                         <span class="material-symbols-outlined">devices</span> App del Equipo
                     </button>
                 </div>
@@ -410,5 +344,6 @@
 
     <!-- VINCULACIÓN AL SCRIPT DE FIREBASE -->
     <script type="module" src="reporte_diario.js"></script>
+    <script type="module" src="sidebar.js"></script>
 </body>
 </html>

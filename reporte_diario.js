@@ -30,12 +30,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     onAuthStateChanged(auth, async (user) => {
+        const pantallaCarga = document.getElementById('pantalla-carga');
+        const mainContent = document.getElementById('main-content');
+        const navbarGlobal = document.getElementById('navbar-global');
+
         if (user) {
-            const emailPrefix = user.email.split('@')[0];
-            document.getElementById('nav-user-initials').innerText = emailPrefix.substring(0, 2).toUpperCase();
-            document.getElementById('dropdown-user-name').innerText = "Usuario: " + emailPrefix;
+            // Obtener perfil del usuario desde Firestore
+            let perfilUsuario = null;
+            try {
+                const userDocSnap = await getDoc(doc(db, "usuarios", user.uid));
+                if (userDocSnap.exists()) {
+                    perfilUsuario = userDocSnap.data();
+                }
+            } catch (e) {
+                console.error("Error obteniendo perfil de usuario", e);
+            }
+
+            // Guardar el ID de la empresa a nivel global para inyectar la plantilla luego
+            window.APP_STATE.idEmpresaUsuario = perfilUsuario ? perfilUsuario.id_empresa : null;
+
+            // Actualizar interfaz del menú superior
+            const nombreMostrar = perfilUsuario && perfilUsuario.name_user ? perfilUsuario.name_user : user.email.split('@')[0];
+            const iniciales = nombreMostrar.substring(0, 2).toUpperCase();
+            const rolMostrar = perfilUsuario && perfilUsuario.rol_user ? perfilUsuario.rol_user : "Personal";
             
-            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('nav-user-initials').innerText = iniciales;
+            document.getElementById('dropdown-user-name').innerText = nombreMostrar;
+            const rolEl = document.getElementById('dropdown-user-rol');
+            if (rolEl) rolEl.innerText = rolMostrar;
+            
+            // Fechas
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const today = `${year}-${month}-${day}`;
+
             ['dateField', 'prevDateField', 'envioDateField', 'editDateField'].forEach(id => {
                 const el = document.getElementById(id);
                 if(el) { el.value = today; }
@@ -46,6 +76,12 @@ document.addEventListener("DOMContentLoaded", () => {
             window.addPersonnelRow();
             window.addAnotacionRow();
             obtenerUbicacion();
+
+            // Ocultar carga y mostrar contenido
+            if (pantallaCarga) pantallaCarga.classList.add('hidden');
+            if (navbarGlobal) navbarGlobal.classList.remove('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
         } else {
             alert("⚠️ Sesión expirada. Redirigiendo al portal.");
             window.location.href = "index.html";
@@ -173,6 +209,17 @@ window.changeQty = function(btn, delta) {
     let val = parseInt(input.value) || 0;
     if((val + delta) >= 1) input.value = val + delta;
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', () => {
+            signOut(auth).then(() => {
+                window.location.href = "index.html";
+            });
+        });
+    }
+});
 
 // --- CONSTRUCTORES DE FILAS EN PANTALLA ---
 window.addActividadRow = function(texto = "") {
@@ -988,7 +1035,7 @@ window.accionGenerarPrevisualizacion = async function() {
     localStorage.setItem("firmaResidente", firma);
 
     const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Compilando Vectorial...`;
+    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Aplicando Plantilla...`;
     btn.disabled = true;
 
     try {
@@ -1004,234 +1051,126 @@ window.accionGenerarPrevisualizacion = async function() {
 
         const data = docSnap.data();
 
-        // 1. Preparación de datos y logos
-        const logoBase64 = window.APP_STATE.logoProyecto ? await urlToBase64(window.APP_STATE.logoProyecto) : '';
+        // 1. Preparación de datos 
         const partesFecha = fecha.split('-'); 
         const fechaFmt = `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0]}`;
         const correlativo = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
 
-        // 2. Convertir imágenes de actividades a Base64 (Máximo 6 fotos)
-        const actividadesConFoto = (data.actividades || []).filter(a => a.urlfoto_act).slice(0, 6);
-        const fotosProcesadas = [];
-        for (let a of actividadesConFoto) {
-            const b64 = await urlToBase64(a.urlfoto_act);
-            if (b64) {
-                fotosProcesadas.push({ base64: b64, texto: a.texto_act });
+        // 2. Armar las cadenas HTML simples para inyectar en la plantilla principal
+        // --- Actividades ---
+        let htmlActividades = (data.actividades && data.actividades.length > 0) 
+            ? `<ul style="margin:0; padding-left:20px; font-size:12px;">` + 
+              data.actividades.map(a => `<li style="margin-bottom:6px;">${a.texto_act}</li>`).join('') + 
+              `</ul>`
+            : '';
+
+        // --- Personal ---
+        let htmlPersonal = '';
+        if (data.personal && data.personal.length > 0) {
+            let totalCant = 0;
+            let rows = data.personal.map((p, idx) => {
+                const cant = parseInt(p.cantidad) || 0;
+                totalCant += cant;
+                return `<tr>
+                    <td style="border:1px solid #1e293b; padding:4px; text-align:center;">${idx + 1}</td>
+                    <td style="border:1px solid #1e293b; padding:4px;">${p.rubro_personal || ''}</td>
+                    <td style="border:1px solid #1e293b; padding:4px;">${p.sector_personal || ''}</td>
+                    <td style="border:1px solid #1e293b; padding:4px; text-align:center; font-weight:bold;">${cant}</td>
+                </tr>`;
+            }).join('');
+            
+            htmlPersonal = `
+                <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                    <thead style="background-color:#f1f5f9;">
+                        <tr>
+                            <th style="border:1px solid #1e293b; padding:4px; width:10%;">N°</th>
+                            <th style="border:1px solid #1e293b; padding:4px; width:40%;">RUBRO</th>
+                            <th style="border:1px solid #1e293b; padding:4px; width:30%;">SECTOR / FRENTE</th>
+                            <th style="border:1px solid #1e293b; padding:4px; width:20%;">CANTIDAD</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                    <tfoot>
+                        <tr style="background-color:#f1f5f9;">
+                            <td colspan="3" style="border:1px solid #1e293b; padding:4px; text-align:right; font-weight:bold;">TOTAL PERSONAL DEL DÍA:</td>
+                            <td style="border:1px solid #1e293b; padding:4px; text-align:center; font-weight:bold; font-size:13px;">${totalCant}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+        }
+
+        // --- Anotaciones ---
+        let htmlAnotaciones = (data.anotaciones && data.anotaciones.length > 0)
+            ? `<ul style="margin:0; padding-left:20px; font-size:12px;">` + 
+              data.anotaciones.map(an => `<li style="margin-bottom:6px;"><b>[${an.hora_anot}]</b> ${an.texto_anot}</li>`).join('') + 
+              `</ul>`
+            : '';
+
+        // --- Fotos (Convertidas a base64 para evitar bloqueos CORS al imprimir) ---
+        const actividadesConFoto = (data.actividades || []).filter(a => a.urlfoto_act);
+        let fotosProcesadasArray = [];
+        if(actividadesConFoto.length > 0) {
+            btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Optimizando Imágenes...`;
+            for (let a of actividadesConFoto) {
+                const b64 = await urlToBase64(a.urlfoto_act);
+                if (b64) fotosProcesadasArray.push({ url: b64, descripcion: a.texto_act });
             }
         }
 
-        // 3. Estructura de Encabezado reutilizable
-        const crearHeader = () => ({
-            table: {
-                widths: ['30%', '70%'],
-                body: [[
-                    logoBase64 ? { image: logoBase64, fit: [110, 40], alignment: 'center', margin: [0, 2, 0, 2] } : { text: '' },
-                    {
-                        stack: [
-                            { text: 'REPORTE DIARIO DE AVANCE DE OBRA', fontSize: 11, bold: true, color: '#FFFFFF', alignment: 'center' },
-                            { text: 'PROYECTO', fontSize: 8, bold: true, color: '#85B648', alignment: 'center', margin: [0, 1, 0, 0] },
-                            { text: (window.APP_STATE.nombreProyecto || '').toUpperCase(), fontSize: 10, bold: true, color: '#FFFFFF', alignment: 'center' }
-                        ],
-                        margin: [0, 3, 0, 3]
-                    }
-                ]]
-            },
-            layout: { fillColor: () => '#233D5C', hLineWidth: () => 0, vLineWidth: () => 0 },
-            margin: [0, 0, 0, 4]
-        });
-
-        // 4. Estructura de Metadatos reutilizable
-        const crearMetadata = () => ({
-            table: {
-                widths: ['65%', '35%'],
-                body: [[
-                    {
-                        stack: [
-                            { text: [{ text: 'CLIENTE: ', bold: true }, (window.APP_STATE.clienteProyecto || '').toUpperCase()] },
-                            { text: [{ text: 'CONTRATISTA: ', bold: true }, (window.APP_STATE.contratistaProyecto || '').toUpperCase()] },
-                            { text: [{ text: 'ELABORADO POR: ', bold: true }, firma.toUpperCase()] }
-                        ],
-                        fontSize: 8, margin: [2, 2, 2, 2]
-                    },
-                    {
-                        stack: [
-                            { text: [{ text: 'FECHA: ', bold: true }, fechaFmt] },
-                            { text: [{ text: 'N° REGISTRO: ', bold: true }, { text: correlativo, color: '#DC2626', bold: true }] }
-                        ],
-                        fontSize: 8, margin: [2, 2, 2, 2]
-                    }
-                ]]
-            },
-            layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
-            margin: [0, 0, 0, 8]
-        });
-
-        // 5. Creación de secciones
-        const makeSectionTitle = (title) => ({
-            table: {
-                widths: ['*'],
-                body: [[{ text: title.toUpperCase(), fontSize: 8, bold: true, color: '#233D5C' }]]
-            },
-            layout: {
-                fillColor: () => '#E2E8F0',
-                hLineWidth: () => 0,
-                vLineWidth: (i) => (i === 0 ? 3 : 0),
-                vLineColor: () => '#233D5C'
-            },
-            margin: [0, 4, 0, 4]
-        });
-
-        // Tabla de Personal
-        let totalCant = 0;
-        let bodyPersonal = [
-            [
-                { text: 'N°', bold: true, alignment: 'center', fontSize: 8, fillColor: '#F1F5F9' },
-                { text: 'RUBRO', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
-                { text: 'SECTOR / FRENTE', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
-                { text: 'CANTIDAD', bold: true, alignment: 'center', fontSize: 8, fillColor: '#F1F5F9' }
-            ]
-        ];
-
-        (data.personal || []).forEach((p, idx) => {
-            const cant = parseInt(p.cantidad) || 0;
-            totalCant += cant;
-            bodyPersonal.push([
-                { text: `${idx + 1}.`, alignment: 'center', fontSize: 8 },
-                { text: p.rubro_personal || '', fontSize: 8 },
-                { text: p.sector_personal || '', fontSize: 8 },
-                { text: cant.toString(), alignment: 'center', bold: true, fontSize: 8 }
-            ]);
-        });
-
-        bodyPersonal.push([
-            { text: 'TOTAL PERSONAL DEL DÍA:', colSpan: 3, alignment: 'right', bold: true, fontSize: 8, fillColor: '#F1F5F9' },
-            {}, {},
-            { text: totalCant.toString(), alignment: 'center', bold: true, fontSize: 9, fillColor: '#F1F5F9' }
-        ]);
-
-        // Lista de Actividades y Anotaciones
-        const listaActividades = (data.actividades || []).map(a => ({ text: a.texto_act, fontSize: 8, margin: [0, 1, 0, 1] }));
-        const listaAnotaciones = (data.anotaciones || []).map(an => ({ text: `[${an.hora_anot}] ${an.texto_anot}`, fontSize: 8, margin: [0, 1, 0, 1] }));
-
-        // Contenido de la Página 1
-        const docContent = [
-            crearHeader(),
-            crearMetadata(),
-            makeSectionTitle('1. Actividades Realizadas'),
-            listaActividades.length > 0 ? { ul: listaActividades, margin: [10, 0, 0, 5] } : { text: 'Sin actividades registradas.', fontSize: 8, italic: true },
-            makeSectionTitle('2. Distribución de Personal y Frentes de Trabajo'),
-            {
-                table: { widths: [25, '*', '*', 60], body: bodyPersonal },
-                layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
-                margin: [0, 2, 0, 5]
-            },
-            makeSectionTitle('3. Anotaciones del Día / Observaciones'),
-            listaAnotaciones.length > 0 ? { ul: listaAnotaciones, margin: [10, 0, 0, 5] } : { text: 'Sin anotaciones registradas.', fontSize: 8, italic: true }
-        ];
-
-        // Contenido de la Página 2 (Si existen imágenes)
-        if (fotosProcesadas.length > 0) {
-            docContent.push({ text: '', pageBreak: 'before' });
-            docContent.push(crearHeader());
-            docContent.push(crearMetadata());
-            docContent.push(makeSectionTitle('Registro Fotográfico y Actividades de Obra'));
-
-            const photoColumns = [];
-            for (let i = 0; i < fotosProcesadas.length; i += 2) {
-                const f1 = fotosProcesadas[i];
-                const f2 = fotosProcesadas[i + 1];
-
-                const rowCols = [
-                    {
-                        stack: [
-                            {
-                                table: {
-                                    widths: ['*'],
-                                    body: [
-                                        // Ajuste perfecto: Ancho 265, Alto 175
-                                        [{ image: f1.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
-                                        [{ text: `${i + 1}. ${f1.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
-                                    ]
-                                },
-                                layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
-                            }
-                        ],
-                        width: '50%'
-                    }
-                ];
-
-                if (f2) {
-                    rowCols.push({
-                        stack: [
-                            {
-                                table: {
-                                    widths: ['*'],
-                                    body: [
-                                        // Ajuste perfecto: Ancho 265, Alto 175
-                                        [{ image: f2.base64, fit: [265, 175], alignment: 'center', margin: [0, 4, 0, 4] }],
-                                        [{ text: `${i + 2}. ${f2.texto}`, fontSize: 9, bold: true, alignment: 'center', margin: [2, 4, 2, 4], fillColor: '#F8FAFC' }]
-                                    ]
-                                },
-                                layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' }
-                            }
-                        ],
-                        width: '50%'
-                    });
-                } else {
-                    rowCols.push({ text: '', width: '50%' });
-                }
-
-                // Aumentamos levemente el margen inferior a 12 y la separación de columnas a 14
-                photoColumns.push({ columns: rowCols, columnGap: 14, margin: [0, 0, 0, 12] });
-            }
-
-            docContent.push(...photoColumns);
-        }
-
-        // 6. Definición del Documento A4
-        const docDefinition = {
-            pageSize: 'A4',
-            pageMargins: [25, 25, 25, 25],
-            content: docContent
+        // 3. Agrupar los datos en el objeto estandarizado
+        const datosPlantilla = {
+            logo: window.APP_STATE.logoProyecto ? await urlToBase64(window.APP_STATE.logoProyecto) : '',
+            nombreEmpresa: "Empresa Contratista", // Este dato idealmente vendría de la colección empresas
+            nombreProyecto: window.APP_STATE.nombreProyecto,
+            cliente: window.APP_STATE.clienteProyecto,
+            contratista: window.APP_STATE.contratistaProyecto,
+            elaboradoPor: firma,
+            fecha: fechaFmt,
+            correlativo: correlativo,
+            htmlActividades: htmlActividades,
+            htmlPersonal: htmlPersonal,
+            htmlAnotaciones: htmlAnotaciones,
+            fotosArray: fotosProcesadasArray
         };
 
-        // 7. Generación del Blob y renderizado de vista previa
-        const pdfDoc = pdfMake.createPdf(docDefinition);
-        
-        pdfDoc.getBlob((blob) => {
-            pdfBlobGenerado = blob;
-            const pdfUrl = URL.createObjectURL(blob);
-            
-            document.getElementById('pdfPlaceholder').classList.add('hidden');
-            const rootCont = document.getElementById('pdfContenedorRaiz');
-            
-            // Detección de dispositivo
-            const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            
-            if (esCelular) {
-                // Interfaz amigable para móviles
-                rootCont.innerHTML = `
-                    <div class="text-center p-8 bg-slate-100 rounded-xl w-full border border-slate-300 shadow-sm">
-                        <span class="material-symbols-outlined text-5xl text-corpBlue-600 mb-3">picture_as_pdf</span>
-                        <p class="text-slate-700 font-bold mb-4 text-lg">El PDF está compilado</p>
-                        <a href="${pdfUrl}" target="_blank" class="inline-block bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition">
-                            Visualizar Documento
-                        </a>
-                    </div>`;
-            } else {
-                // Visor clásico para PC
-                rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-[650px] rounded-xl shadow-lg border border-slate-300"></iframe>`;
+        // 4. Importar dinámicamente la plantilla
+        let renderizarPDF;
+        const idEmpresa = window.APP_STATE.idEmpresaUsuario || 'default';
+        try {
+            // El "./" significa "busca desde donde estoy parado (afuera)", luego entra a "js", etc.
+            const modulo = await import(`./js/templates/reporte_diario/${idEmpresa}.js`);
+            renderizarPDF = modulo.renderizarPDF;
+        } catch (e) {
+            console.warn(`No se encontró la plantilla ${idEmpresa}.js, usando EMP00001 como respaldo.`, e);
+            try {
+                // Ruta de respaldo también apuntando a la carpeta js
+                const modulo = await import(`./js/templates/reporte_diario/EMP00001.js`);
+                renderizarPDF = modulo.renderizarPDF;
+            } catch (fallbackError) {
+                 alert("Error crítico: No se encontró la plantilla de diseño en sus archivos locales/GitHub.");
+                 return;
             }
-            
-            rootCont.classList.remove('hidden');
+        }
 
-            const btnGuardar = document.getElementById('btnGuardarOficial');
-            btnGuardar.classList.remove('hidden');
-            btnGuardar.classList.add('flex');
-        });
+        // 5. Inyectar HTML en la pantalla
+        document.getElementById('pdfPlaceholder').classList.add('hidden');
+        const rootCont = document.getElementById('pdfContenedorRaiz');
+        rootCont.innerHTML = renderizarPDF(datosPlantilla);
+        rootCont.classList.remove('hidden');
+        rootCont.classList.add('flex'); // Asegura que los items se centren
+
+        // Habilitar botón de impresión oficial
+        const btnGuardar = document.getElementById('btnGuardarOficial');
+        btnGuardar.classList.remove('hidden');
+        btnGuardar.classList.add('flex');
+        
+        // Cambiar lógica de guardado: Como ya no usamos PDFMake, ahora el botón mandará a imprimir desde el navegador.
+        btnGuardar.onclick = function() { window.print(); };
+        btnGuardar.innerHTML = `<span class="material-symbols-outlined">print</span> Imprimir / Guardar como PDF`;
 
     } catch (error) {
-        console.error("Error al generar PDF vectorial:", error);
+        console.error("Error al aplicar plantilla:", error);
         alert("Error al procesar los datos: " + error.message);
     } finally {
         btn.innerHTML = origText;
