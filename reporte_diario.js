@@ -1265,8 +1265,8 @@ window.cargarDatosMensajeria = async function() {
     const partesFecha = fecha.split('-');
     if (partesFecha.length !== 3) return;
 
-    // Búsqueda flexible del botón para evitar fallos si cambia la firma del onclick
-    const btn = document.querySelector('button[onclick*="cargarDatosMensajeria"]');
+    // Captura directa y segura por ID
+    const btn = document.getElementById('btnCargarCorreo');
     const origText = btn ? btn.innerHTML : '';
     
     if (btn) {
@@ -1281,10 +1281,10 @@ window.cargarDatosMensajeria = async function() {
     // 1. Llenar Asunto
     document.getElementById('envioAsunto').value = `REPORTE DIARIO DE OBRA - ${projName} - N° ${correlativo} (${fechaFmt})`;
 
-    // 2. Llenar Para y CC (Limpiando formatos de correos)
-    const formatEmails = (str) => str.replace(/;/g, ',').replace(/\s+/g, '');
-    document.getElementById('envioPara').value = window.APP_STATE.correosPara ? formatEmails(window.APP_STATE.correosPara) : "";
-    document.getElementById('envioCc').value = window.APP_STATE.correosCC ? formatEmails(window.APP_STATE.correosCC) : "";
+    // 2. Llenar Para y CC
+    const formatEmails = (str) => str ? str.replace(/;/g, ',').replace(/\s+/g, '') : "";
+    document.getElementById('envioPara').value = formatEmails(window.APP_STATE.correosPara);
+    document.getElementById('envioCc').value = formatEmails(window.APP_STATE.correosCC);
 
     // 3. Consultar PDF oficial guardado en Firestore
     let linkDescarga = "⚠️ (El PDF aún no ha sido generado/guardado en la pestaña PDF)";
