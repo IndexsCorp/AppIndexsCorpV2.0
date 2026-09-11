@@ -44,7 +44,8 @@
 
     <!-- PANTALLA DE CARGA GLOBAL -->
     <div id="pantalla-carga" class="fixed inset-0 bg-slate-100 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
-        <img src="./Logo_App.png" alt="Logo" class="h-12 object-contain mb-6 animate-pulse">
+        <!-- Se cambió h-12 por w-24 h-24 (96x96 px) -->
+        <img src="./Logo_App.png" alt="Logo" class="w-24 h-24 object-contain mb-6 animate-pulse rounded-lg">
         <span class="material-symbols-outlined text-3xl text-corpBlue-500 animate-spin">refresh</span>
         <p class="text-xs text-slate-400 mt-3 font-medium uppercase tracking-wider">Verificando sesión...</p>
     </div>
@@ -52,7 +53,8 @@
     <!-- BLOQUE 1: LOGIN (Oculto por defecto) -->
     <div id="bloque-login" class="hidden items-center justify-center flex-grow p-4">
         <div class="bg-white p-8 rounded-xl shadow-md w-full max-w-sm text-center">
-            <img src="./Logo_App.png" alt="Logo Empresa" class="h-16 w-auto mx-auto mb-4 object-contain">
+            <!-- Se cambió h-16 w-auto por w-32 h-32 (128x128 px) -->
+            <img src="./Logo_App.png" alt="Logo Empresa" class="w-32 h-32 mx-auto mb-4 object-contain rounded-lg shadow-sm">
             <h2 class="text-2xl font-bold text-slate-800 mb-1">Iniciar Sesión</h2>
             <p class="text-xs text-slate-500 mb-6">Portal de Control y Gestión</p>
             

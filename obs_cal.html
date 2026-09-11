@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Observaciones de Calidad</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              corpBlue: {
+                50: '#ebf0f5', 100: '#d1dee8', 300: '#7aa3c2', 500: '#336a94',
+                600: '#233D5C', 700: '#1c314a', 800: '#142538',
+              },
+              corpGreen: {
+                DEFAULT: '#85B648', hover: '#719e3a'
+              },
+              status: {
+                abierta: '#ef4444',     /* red-500 */
+                proceso: '#f59e0b',     /* amber-500 */
+                levantada: '#3b82f6',   /* blue-500 */
+                cerrada: '#10b981'      /* emerald-500 */
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <style>
+        .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans overflow-x-hidden min-h-screen flex flex-col">
+
+    <!-- BARRA SUPERIOR -->
+    <nav id="navbar-global" class="bg-corpBlue-600 text-white px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-md">
+        <div class="flex items-center gap-4">
+            <button onclick="window.toggleSidebar()" class="hover:bg-corpBlue-500 p-1 rounded transition flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">menu</span>
+            </button>
+            <span class="text-lg font-bold flex items-center gap-2">
+                <span class="material-symbols-outlined">rule</span> Obs. de Calidad
+            </span>
+        </div>
+        
+        <div class="relative flex items-center gap-3">
+            <a href="index.html" class="hidden md:flex items-center gap-2 bg-corpBlue-700 hover:bg-corpBlue-800 px-3 py-1.5 rounded-lg text-sm font-bold transition border border-corpBlue-500">
+                <span class="material-symbols-outlined text-[18px]">arrow_back</span> Portal
+            </a>
+            <button onclick="window.toggleUserMenu()" id="nav-user-initials" class="w-9 h-9 bg-corpBlue-50 text-corpBlue-600 rounded-full font-bold flex items-center justify-center hover:bg-white transition shadow-sm">
+                --
+            </button>
+            <div id="user-menu" class="hidden absolute right-0 top-12 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 overflow-hidden z-50">
+                <div class="px-4 py-3 border-b border-slate-100">
+                    <p id="dropdown-user-name" class="text-sm font-bold text-slate-800">Cargando...</p>
+                </div>
+                <div class="border-t border-slate-100"></div>
+                <button id="btn-logout" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
+                    <span class="material-symbols-outlined text-[20px]">logout</span> Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- SIDEBAR DINÁMICO -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-40 transition-opacity" onclick="window.toggleSidebar()"></div>
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 flex flex-col">
+        <!-- Inyectado por sidebar.js -->
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-grow p-4 max-w-4xl mx-auto w-full mt-2">
+        
+        <!-- TABS -->
+        <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <button onclick="window.switchTab('registrar')" id="btnTabRegistrar" class="tab-btn active flex-1 bg-corpBlue-600 text-white border-corpBlue-600 border rounded-lg py-2.5 px-4 font-bold text-sm shadow-md transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">add_circle</span> Registrar
+            </button>
+            <button onclick="window.switchTab('status')" id="btnTabStatus" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">checklist</span> Status
+            </button>
+            <button onclick="window.switchTab('pdf')" id="btnTabPdf" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">picture_as_pdf</span> Reporte
+            </button>
+            <button onclick="window.switchTab('enviar')" id="btnTabEnviar" class="tab-btn flex-1 bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-4 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">forward_to_inbox</span> Enviar
+            </button>
+        </div>
+
+        <!-- 1. PESTAÑA REGISTRAR (NUEVO HALLAZGO) -->
+        <div id="tabRegistrar" class="tab-content active bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">policy</span> Reportar Nuevo Hallazgo
+            </h2>
+
+            <form id="formObservacionCalidad" class="space-y-6">
+                <!-- BLOQUE 1: Ubicación -->
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h4 class="text-sm font-bold text-corpBlue-600 flex items-center gap-2 mb-4 uppercase tracking-wider"><span class="material-symbols-outlined text-[18px]">location_on</span> 1. Identificación y Ubicación</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Frente / Sector</label>
+                            <select id="frente" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                                <option value="" disabled selected>Seleccione...</option>
+                                <!-- Se llena vía JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Ubicación Específica</label>
+                            <input type="text" id="ubicacion_obscal" placeholder="Ej: Eje 4-B, Muro E-2" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Momento de Identificación</label>
+                            <select id="timeiden_obscal" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                                <option value="" disabled selected>Seleccione fase...</option>
+                                <option value="Inspección Rutinaria">Inspección Rutinaria</option>
+                                <option value="Liberación de Elemento">Liberación de Elemento</option>
+                                <option value="Recepción de Materiales">Recepción de Materiales</option>
+                                <option value="Auditoría Externa">Auditoría Externa</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BLOQUE 2: Clasificación Técnica -->
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h4 class="text-sm font-bold text-corpBlue-600 flex items-center gap-2 mb-4 uppercase tracking-wider"><span class="material-symbols-outlined text-[18px]">category</span> 2. Clasificación Técnica</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Especialidad</label>
+                            <select id="especialidad" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                                <!-- Se llena vía JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Categoría</label>
+                            <select id="categoria_obscal" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                                <option value="Proceso Constructivo">Proceso Constructivo</option>
+                                <option value="Material Defectuoso">Material Defectuoso</option>
+                                <option value="Incumplimiento de Planos">Incumplimiento de Planos</option>
+                                <option value="Mano de Obra">Mano de Obra</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Palabra Clave / Tema</label>
+                            <input type="text" id="wordkey_obscal" placeholder="Ej: Recubrimiento, Trazado, Cangrejera" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Gravedad</label>
+                            <select id="gravedad" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                                <option value="Baja">Baja</option>
+                                <option value="Media">Media</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Crítica">Crítica (Parada de Trabajo)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Responsable / Subcontrata</label>
+                            <input type="text" id="responsable_subcontrata" placeholder="Empresa o Cuadrilla" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Fecha Límite de Cierre</label>
+                            <input type="date" id="datecierrecom_obscal" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 bg-white">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BLOQUE 3: Evidencia -->
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h4 class="text-sm font-bold text-corpBlue-600 flex items-center gap-2 mb-4 uppercase tracking-wider"><span class="material-symbols-outlined text-[18px]">photo_camera</span> 3. Descripción y Evidencia</h4>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Descripción del Hallazgo</label>
+                            <textarea id="descrip_obscal" rows="3" placeholder="Describa el problema encontrado..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500"></textarea>
+                        </div>
+                        
+                        <!-- Input Fotográfico -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Foto del Hallazgo</label>
+                            <div class="flex items-center justify-center w-full">
+                                <label for="input_foto_obscal" class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition">
+                                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <span class="material-symbols-outlined text-slate-400 text-3xl mb-2">upload_file</span>
+                                        <p class="text-sm text-slate-500 font-semibold"><span class="text-corpBlue-600">Click para subir</span> o tomar foto</p>
+                                    </div>
+                                    <input id="input_foto_obscal" type="file" accept="image/*" class="hidden" onchange="window.previewImagenHallazgo(this)" />
+                                </label>
+                            </div>
+                            <!-- Miniatura Previa -->
+                            <div id="preview_hallazgo_container" class="hidden mt-3 relative w-32 h-32 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                                <img id="img_preview_hallazgo" src="" class="w-full h-full object-cover">
+                                <button type="button" onclick="window.borrarImagenHallazgo()" class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex justify-center items-center opacity-80 hover:opacity-100">
+                                    <span class="material-symbols-outlined text-[16px]">close</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" onclick="window.guardarObservacionCalidad()" class="w-full bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition shadow-md">
+                    Guardar Observación <span class="material-symbols-outlined text-lg">save</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- 2. PESTAÑA STATUS (LEVANTAMIENTOS) -->
+        <div id="tabStatus" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">rule_folder</span> Panel de Seguimiento
+            </h2>
+            
+            <!-- Barra de Filtros -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-end mb-6">
+                <div class="w-full md:w-1/3">
+                    <label class="block text-sm font-semibold mb-1">Filtrar por Estado:</label>
+                    <select id="filtroEstado" class="w-full p-2.5 border rounded-lg bg-white outline-none">
+                        <option value="Todas">Todas</option>
+                        <option value="Abierta" selected>Abiertas / Pendientes</option>
+                        <option value="Levantada">Levantadas</option>
+                    </select>
+                </div>
+                <div class="w-full md:w-1/3">
+                    <label class="block text-sm font-semibold mb-1">Especialidad:</label>
+                    <select id="filtroEspecialidad" class="w-full p-2.5 border rounded-lg bg-white outline-none">
+                        <option value="Todas">Todas</option>
+                        <!-- Se llena vía JS -->
+                    </select>
+                </div>
+                <button type="button" onclick="window.buscarObservaciones()" class="w-full md:w-1/3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition">
+                    <span class="material-symbols-outlined text-lg">search</span> Filtrar
+                </button>
+            </div>
+
+            <div id="loadingStatus" class="hidden text-center text-corpBlue-600 font-bold py-8 flex justify-center gap-2 items-center">
+                <span class="material-symbols-outlined animate-spin">refresh</span> Cargando...
+            </div>
+            
+            <!-- Contenedor de Tarjetas de Observación -->
+            <div id="resultadosStatus" class="space-y-4">
+                
+                <!-- ========================================== -->
+                <!-- EJEMPLO 1: TARJETA DE OBSERVACIÓN "ABIERTA" -->
+                <!-- ========================================== -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col mb-4">
+                    <!-- Header de la Tarjeta -->
+                    <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <span class="font-black text-slate-800">OBS-CAL-001</span>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded bg-red-100 text-red-700 uppercase tracking-wider flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">warning</span> Abierta
+                            </span>
+                        </div>
+                        <div class="text-xs font-semibold text-slate-500">
+                            09/09/2026 • Especialidad: EST
+                        </div>
+                    </div>
+
+                    <!-- Cuerpo: Datos del Hallazgo -->
+                    <div class="p-4 flex flex-col md:flex-row gap-4">
+                        <div class="flex-1 space-y-2 text-sm">
+                            <p><span class="font-bold text-slate-700">Frente / Ubicación:</span> Sótano 1 - Eje 4-B</p>
+                            <p><span class="font-bold text-slate-700">Responsable:</span> Cuadrilla Acero (Juan Pérez)</p>
+                            <p><span class="font-bold text-slate-700">F. Límite de Cierre:</span> <span class="text-red-600 font-bold">12/09/2026</span></p>
+                            
+                            <div class="bg-amber-50 text-amber-900 p-3 rounded-lg border border-amber-200 mt-2">
+                                <span class="font-bold block text-xs uppercase mb-1 tracking-wider">Descripción del Hallazgo:</span>
+                                Falta de recubrimiento en los estribos de la placa P-01. El acero está pegado al encofrado.
+                            </div>
+                        </div>
+                        
+                        <!-- Foto del Hallazgo -->
+                        <div class="w-full md:w-48 h-32 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                            <img src="https://placehold.co/400x300/e2e8f0/475569?text=Foto+Hallazgo" class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition" alt="Foto Hallazgo" title="Clic para ampliar">
+                        </div>
+                    </div>
+
+                    <!-- Zona de Acción: Formulario de Levantamiento -->
+                    <div class="bg-slate-50 p-4 border-t border-slate-200">
+                        <h5 class="text-sm font-bold text-corpBlue-600 mb-3 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[18px]">build</span> Registrar Levantamiento
+                        </h5>
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            <div class="md:col-span-7">
+                                <textarea id="descriplevan_OBS-CAL-001" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-corpGreen" rows="3" placeholder="Detalle cómo se solucionó la observación..."></textarea>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label class="flex flex-col items-center justify-center w-full h-full min-h-[5rem] border-2 border-dashed border-slate-300 rounded-lg bg-white cursor-pointer hover:bg-slate-50 transition">
+                                    <span class="material-symbols-outlined text-slate-400">add_a_photo</span>
+                                    <span class="text-xs text-slate-500 font-bold mt-1">Subir Foto</span>
+                                    <input type="file" id="fotolevan_OBS-CAL-001" class="hidden" accept="image/*">
+                                </label>
+                            </div>
+                            <div class="md:col-span-2 flex">
+                                <button type="button" onclick="window.ejecutarLevantamiento('OBS-CAL-001')" class="w-full bg-corpGreen hover:bg-corpGreen-hover text-white font-bold rounded-lg flex flex-col items-center justify-center transition shadow-sm">
+                                    <span class="material-symbols-outlined mb-1">check_circle</span>
+                                    <span class="text-xs uppercase tracking-wider">Levantar</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================ -->
+                <!-- EJEMPLO 2: TARJETA DE OBSERVACIÓN "LEVANTADA" -->
+                <!-- ============================================ -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col mb-4 opacity-95">
+                    <!-- Header de la Tarjeta -->
+                    <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <span class="font-black text-slate-800">OBS-CAL-002</span>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-700 uppercase tracking-wider flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">done_all</span> Levantada
+                            </span>
+                        </div>
+                        <div class="text-xs font-semibold text-slate-500">
+                            Cierre Real: 11/09/2026
+                        </div>
+                    </div>
+
+                    <!-- Cuerpo: Comparativa Antes y Después -->
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <!-- Bloque Izquierdo: HALLAZGO -->
+                        <div class="space-y-3">
+                            <h5 class="text-xs font-bold text-red-600 uppercase tracking-wider border-b border-red-100 pb-1">Hallazgo Original</h5>
+                            <div class="flex gap-3">
+                                <div class="w-24 h-24 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                                    <img src="https://placehold.co/200x200/fee2e2/dc2626?text=Antes" class="w-full h-full object-cover">
+                                </div>
+                                <div class="text-sm text-slate-700 flex-1">
+                                    <p class="mb-1"><span class="font-bold">Ubicación:</span> Losa Piso 2</p>
+                                    <p class="text-xs italic text-slate-500 line-clamp-3">"Desnivel de 3cm en el encuentro de la losa con la viga V-10."</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bloque Derecho: SOLUCIÓN -->
+                        <div class="space-y-3">
+                            <h5 class="text-xs font-bold text-corpGreen uppercase tracking-wider border-b border-green-100 pb-1">Solución Ejecutada</h5>
+                            <div class="flex gap-3">
+                                <div class="w-24 h-24 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                                    <img src="https://placehold.co/200x200/dcfce7/16a34a?text=Despu%C3%A9s" class="w-full h-full object-cover border-2 border-corpGreen">
+                                </div>
+                                <div class="text-sm text-slate-700 flex-1">
+                                    <p class="mb-1"><span class="font-bold">Validado por:</span> Ing. Calidad</p>
+                                    <p class="text-xs text-slate-600 line-clamp-3">"Se pulió el área afectada y se niveló con mortero epóxico hasta alcanzar la cota requerida."</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. PESTAÑA PREVISUALIZAR PDF -->
+        <div id="tabPdf" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">picture_as_pdf</span> Generador de Documento
+            </h2>
+            
+            <!-- Controles de Generación -->
+            <div class="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-2/3">
+                    <label class="block text-sm font-semibold mb-1 text-slate-700">Seleccione la Observación:</label>
+                    <select id="prevObsSelect" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500">
+                        <option value="" disabled selected>Busque y seleccione una observación...</option>
+                        <!-- Se llena vía JS con observaciones del proyecto -->
+                    </select>
+                </div>
+                <button type="button" id="btnGenerarPrevPdf" onclick="window.generarPrevisualizacionObsPdf()" class="w-full md:w-1/3 bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
+                    <span class="material-symbols-outlined text-lg">magic_button</span> Crear Vista
+                </button>
+            </div>
+
+            <!-- Placeholder (Se oculta al generar la vista) -->
+            <div id="pdfPlaceholderObs" class="w-full h-40 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 font-bold mb-6">
+                <span>Seleccione una observación para generar su reporte.</span>
+            </div>
+
+            <!-- CONTENEDOR RAIZ DEL PDF (Lienzo A4) -->
+            <div id="pdfContenedorRaiz" class="hidden flex-col items-center gap-8 bg-slate-400 p-4 md:p-8 rounded-xl shadow-inner mb-6 overflow-x-auto">
+                
+                <div id="pdfPaginaObs" class="pagina-a4 bg-white text-black p-8 shadow-2xl relative flex flex-col" style="width: 210mm; min-height: 297mm; box-sizing: border-box; font-family: Arial, sans-serif;">
+                    
+                    <!-- ENCABEZADO OFICIAL -->
+                    <div class="header-blue bg-corpBlue-800 text-white p-4 flex justify-between items-center mb-0">
+                        <div class="w-1/3">
+                            <img id="pdfLogoEmpresa" src="" alt="Logo" class="max-h-16 object-contain bg-white/10 p-1 rounded">
+                        </div>
+                        <div class="w-2/3 text-center">
+                            <h1 class="text-xl font-black uppercase tracking-wide">Reporte de Observación de Calidad</h1>
+                            <p class="text-xs font-bold text-corpGreen uppercase tracking-widest mt-0.5">PROYECTO</p>
+                            <p id="pdfProyectoNombre" class="text-sm font-bold uppercase tracking-wider"></p>
+                        </div>
+                    </div>
+
+                    <!-- METADATOS TÉCNICOS -->
+                    <div class="grid grid-cols-12 border-2 border-slate-800 text-xs mb-6 bg-white">
+                        <!-- Columna Izquierda: Datos del Hallazgo -->
+                        <div class="col-span-8 p-3 space-y-1.5 border-r-2 border-slate-800">
+                            <div><span class="font-bold text-slate-700">FRENTE / SECTOR:</span> <span id="pdfObsFrente" class="font-semibold uppercase ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">UBICACIÓN ESPECÍFICA:</span> <span id="pdfObsUbicacion" class="font-semibold uppercase ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">ESPECIALIDAD / TEMA:</span> <span id="pdfObsEspecialidadTema" class="font-semibold uppercase ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">SUBCONTRATA RESPONSABLE:</span> <span id="pdfObsResponsable" class="font-semibold uppercase ml-1"></span></div>
+                        </div>
+                        <!-- Columna Derecha: Fechas y Estado -->
+                        <div class="col-span-4 p-3 space-y-1.5 flex flex-col justify-center bg-slate-50">
+                            <div><span class="font-bold text-slate-700">N° REGISTRO:</span> <span id="pdfObsID" class="font-black text-corpBlue-600 text-sm ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">FECHA REPORTE:</span> <span id="pdfObsFechaReg" class="font-bold ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">ESTADO ACTUAL:</span> <span id="pdfObsEstado" class="font-black uppercase ml-1"></span></div>
+                            <div><span class="font-bold text-slate-700">GRAVEDAD:</span> <span id="pdfObsGravedad" class="font-bold uppercase ml-1"></span></div>
+                        </div>
+                    </div>
+
+                    <!-- BLOQUE 1: HALLAZGO ORIGINAL -->
+                    <div class="mb-6 flex-1 flex flex-col">
+                        <h3 class="bg-slate-200 text-slate-800 font-bold px-3 py-1.5 text-sm uppercase border-l-4 border-red-600 mb-3">
+                            1. Descripción del Hallazgo
+                        </h3>
+                        <div class="grid grid-cols-12 gap-4 flex-1">
+                            <div class="col-span-5 text-sm text-justify text-slate-700 leading-relaxed">
+                                <p id="pdfObsDescrip" class="mb-4">No se registró descripción.</p>
+                                <div class="bg-red-50 border border-red-200 p-3 rounded text-xs">
+                                    <span class="font-bold text-red-800">Fecha Límite de Cierre:</span> 
+                                    <span id="pdfObsFechaLimite" class="text-red-700"></span>
+                                </div>
+                            </div>
+                            <div class="col-span-7 flex justify-center items-start">
+                                <img id="pdfObsFoto" src="" class="max-w-full max-h-[250px] object-contain border-2 border-slate-300 rounded shadow-sm hidden" alt="Foto Hallazgo">
+                                <div id="pdfObsSinFoto" class="w-full h-48 bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 font-bold text-sm hidden">Sin registro fotográfico</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BLOQUE 2: SOLUCIÓN Y LEVANTAMIENTO -->
+                    <div class="mb-2 flex-1 flex flex-col">
+                        <h3 class="bg-slate-200 text-slate-800 font-bold px-3 py-1.5 text-sm uppercase border-l-4 border-corpGreen mb-3">
+                            2. Acción Correctiva y Levantamiento
+                        </h3>
+                        
+                        <!-- Contenedor dinámico (Cambia si está abierta o levantada) -->
+                        <div id="pdfLevanContenedor" class="grid grid-cols-12 gap-4 flex-1">
+                            <div class="col-span-5 text-sm text-justify text-slate-700 leading-relaxed">
+                                <p id="pdfLevanDescrip">Aún no se ha registrado la acción correctiva.</p>
+                                <div id="pdfLevanMetadatos" class="bg-green-50 border border-green-200 p-3 rounded text-xs mt-4 hidden">
+                                    <div class="mb-1"><span class="font-bold text-green-800">Fecha de Cierre:</span> <span id="pdfLevanFechaCierre" class="text-green-700"></span></div>
+                                    <div><span class="font-bold text-green-800">Validado por:</span> <span id="pdfLevanValidador" class="text-green-700 uppercase"></span></div>
+                                </div>
+                            </div>
+                            <div class="col-span-7 flex justify-center items-start">
+                                <img id="pdfLevanFoto" src="" class="max-w-full max-h-[250px] object-contain border-2 border-slate-300 rounded shadow-sm hidden" alt="Foto Levantamiento">
+                                <div id="pdfLevanSinFoto" class="w-full h-48 bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 font-bold text-sm">Pendiente de ejecución</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <button type="button" id="btnGuardarOficialObs" class="hidden w-full bg-corpGreen hover:bg-corpGreen-hover text-white font-bold py-3.5 rounded-xl justify-center items-center gap-2 transition shadow-md" onclick="window.accionGuardarPDFDefinitivo()">
+                <span class="material-symbols-outlined">print</span> Descargar / Imprimir Oficial
+            </button>
+        </div>
+
+        <!-- 4. PESTAÑA ENVIAR -->
+        <div id="tabEnviar" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">forward_to_inbox</span> Enviar Notificación
+            </h2>
+            
+            <div class="mb-6 flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-2/3">
+                    <label class="block text-sm font-semibold mb-1">Seleccione la Observación a Notificar:</label>
+                    <select id="envioObsSelect" class="w-full p-2.5 border rounded-lg bg-slate-50 outline-none focus:border-corpBlue-500">
+                        <option value="" disabled selected>Busque y seleccione una observación...</option>
+                        <!-- Se llena vía JS con las observaciones del proyecto -->
+                    </select>
+                </div>
+                <button type="button" id="btnCargarCorreoObs" onclick="window.cargarDatosMensajeriaObs()" class="w-full md:w-1/3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
+                    <span class="material-symbols-outlined text-lg">sync</span> Cargar Datos
+                </button>
+            </div>
+
+            <div class="space-y-4 border border-slate-200 p-5 rounded-xl bg-slate-50">
+                <div>
+                    <label class="block text-sm font-semibold mb-1 text-slate-600">Para:</label>
+                    <input type="text" id="envioPara" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1 text-slate-600">CC:</label>
+                    <input type="text" id="envioCc" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1 text-slate-600">Asunto:</label>
+                    <input type="text" id="envioAsunto" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none font-bold">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1 text-slate-600">Cuerpo del Correo:</label>
+                    <textarea id="envioCuerpo" rows="6" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500"></textarea>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <label class="block text-sm font-semibold mb-2 text-slate-700 text-center">Seleccione la plataforma para despachar:</label>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button type="button" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivoObs('gmail')">
+                        <span class="material-symbols-outlined">mail</span> Gmail Web
+                    </button>
+                    <button type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivoObs('outlook')">
+                        <span class="material-symbols-outlined">forward_to_inbox</span> Outlook Web
+                    </button>
+                    <button type="button" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition shadow-sm" onclick="window.accionEnviarCorreoDefinitivoObs('default')">
+                        <span class="material-symbols-outlined">devices</span> App del Equipo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Archivo JS para inyectar la lógica de Firestore -->
+    <script type="module" src="obs_cal.js"></script>
+</body>
+</html>
