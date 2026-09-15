@@ -1,32 +1,18 @@
-// 1. Importar herramientas de Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, getDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+// ==========================================
+// index.js - PORTAL PRINCIPAL
+// ==========================================
 
-// 2. Tus llaves de Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyCiTCag6lwIZcwjnAHPDf0ANaBX0B7DYlY",
-    authDomain: "indexscorp.firebaseapp.com",
-    projectId: "indexscorp",
-    storageBucket: "indexscorp.firebasestorage.app",
-    messagingSenderId: "925382774481",
-    appId: "1:925382774481:web:19a3bcbc23bfc89fecbff0"
-};
+// 1. Importar desde nuestro núcleo central en lugar de inicializar Firebase de nuevo
+import { auth, db, initAppCore } from "./app_core.js";
+import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+import { collection, getDocs, doc, getDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-// 3. Encender Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// --- VARIABLES GLOBALES DE ESTADO ---
-let usuarioActual = null;
-let perfilUsuario = null; 
+// Variable local para la navegación en el portal
 let proyectoActual = null;
-let appActual = null;
 
-// --- INICIALIZACIÓN Y EVENTOS ---
+// --- INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Manejo de caché de credenciales (para autocompletar)
+    // Manejo de caché de credenciales (para autocompletar el login)
     const savedUser = localStorage.getItem('indexCorp_user');
     const savedPass = localStorage.getItem('indexCorp_pass');
     if(savedUser && savedPass) {
@@ -35,32 +21,33 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('recordar').checked = true;
     }
 
-    // Asignación de eventos a botones
     const btnLogin = document.getElementById('btn-login');
     if (btnLogin) btnLogin.addEventListener('click', iniciarSesion);
 
-    const btnLogout = document.getElementById('btn-logout');
-    if (btnLogout) btnLogout.addEventListener('click', cerrarSesion);
-
-    // NUEVO: Escuchar si ya hay una sesión activa al cargar la página
-    onAuthStateChanged(auth, async (user) => {
+    // Arrancamos el AppCore pasándole 'false' porque en el index no necesitamos cargar un proyecto específico todavía
+    initAppCore(false).then((estadoGlobal) => {
         const pantallaCarga = document.getElementById('pantalla-carga');
         const bloqueLogin = document.getElementById('bloque-login');
 
-        if (user) {
-            // Si hay sesión, prepara todo el entorno (trae datos de firestore)
-            await prepararEntornoUsuario(user);
+        if (estadoGlobal && estadoGlobal.user.uid) {
+            // Usuario con sesión activa
+            bloqueLogin.classList.add('hidden');
+            document.getElementById('navbar-global').classList.remove('hidden');
+            document.getElementById('bloque-proyectos').classList.remove('hidden');
+            document.getElementById('bloque-apps').classList.add('hidden');
             
-            // Una vez cargado todo, ocultamos la pantalla de carga
+            window.cargarProyectos();
+            
             if(pantallaCarga) pantallaCarga.classList.add('hidden');
         } else {
-            // Si NO hay sesión, nos aseguramos de mostrar el login y no los proyectos
+            // Usuario sin sesión (Mostrar Login)
             bloqueLogin.classList.remove('hidden');
             bloqueLogin.classList.add('flex');
-            
-            // Ocultamos la pantalla de carga
             if(pantallaCarga) pantallaCarga.classList.add('hidden');
         }
+    }).catch(error => {
+        console.error("Error al inicializar la app:", error);
+        alert("Hubo un problema de conexión. Intente actualizar la página.");
     });
 });
 
@@ -80,7 +67,7 @@ function iniciarSesion() {
     btn.disabled = true;
 
     signInWithEmailAndPassword(auth, usuario, pass)
-        .then((userCredential) => {
+        .then(() => {
             if(recordar) {
                 localStorage.setItem('indexCorp_user', usuario);
                 localStorage.setItem('indexCorp_pass', pass);
@@ -88,7 +75,8 @@ function iniciarSesion() {
                 localStorage.removeItem('indexCorp_user');
                 localStorage.removeItem('indexCorp_pass');
             }
-            // El onAuthStateChanged se disparará automáticamente al tener éxito
+            // Recargamos la página para que el initAppCore detecte la nueva sesión
+            window.location.reload(); 
         })
         .catch((error) => {
             alert("Error de inicio de sesión: Verifique sus credenciales.");
@@ -98,58 +86,19 @@ function iniciarSesion() {
         });
 }
 
-// --- PREPARAR ENTORNO DESPUÉS DE LOGUEARSE O RECARGAR ---
-async function prepararEntornoUsuario(user) {
-    usuarioActual = user;
-    
-    // 1. Obtener datos extendidos del usuario desde Firestore
-    const userDocSnap = await getDoc(doc(db, "usuarios", usuarioActual.uid));
-    
-    if (userDocSnap.exists()) {
-        perfilUsuario = userDocSnap.data();
-        
-        // Actualizar interfaz con el nombre real y rol
-        const nombreMostrar = perfilUsuario.name_user || usuarioActual.email.split('@')[0];
-        const iniciales = nombreMostrar.substring(0, 2).toUpperCase();
-        const rolMostrar = perfilUsuario.rol_user || "Personal";
-        
-        document.getElementById('nav-user-initials').innerText = iniciales;
-        document.getElementById('dropdown-user-name').innerText = nombreMostrar;
-        document.getElementById('dropdown-user-rol').innerText = rolMostrar;
-    } else {
-        const emailPrefix = usuarioActual.email.split('@')[0];
-        document.getElementById('nav-user-initials').innerText = emailPrefix.substring(0, 2).toUpperCase();
-        document.getElementById('dropdown-user-name').innerText = emailPrefix;
-        document.getElementById('dropdown-user-rol').innerText = "Personal"; 
-    }
-    
-    // 2. Cambiar vistas
-    document.getElementById('bloque-login').classList.add('hidden');
-    document.getElementById('navbar-global').classList.remove('hidden');
-    document.getElementById('bloque-proyectos').classList.remove('hidden');
-    document.getElementById('bloque-apps').classList.add('hidden');
-    
-    // Restaurar botón si venía de un login manual
-    const btn = document.getElementById('btn-login');
-    if(btn) {
-        btn.innerHTML = 'Ingresar <span class="material-symbols-outlined text-lg">login</span>';
-        btn.disabled = false;
-    }
-
-    // 3. Cargar los proyectos
-    window.cargarProyectos();
-}
-
-// --- CARGAR PROYECTOS (FILTRADOS POR ROL/EMPRESA) ---
+// --- CARGAR PROYECTOS (FILTRADOS POR PERMISOS Y EMPRESA) ---
 window.cargarProyectos = async function() {
     const contenedor = document.getElementById('contenedor-proyectos');
     contenedor.innerHTML = '<div class="col-span-full flex items-center gap-2 text-slate-500"><span class="material-symbols-outlined animate-spin">refresh</span> Consultando base de datos...</div>';
     
     try {
+        // Tomamos los datos del usuario logueado directamente del estado global en caché
+        const user = window.APP_STATE.user;
         let proyectosQuery;
         
-        if (perfilUsuario && perfilUsuario.id_empresa) {
-            proyectosQuery = query(collection(db, "proyectos"), where("id_empresa", "==", perfilUsuario.id_empresa));
+        // Si el usuario pertenece a una empresa, solo vemos los proyectos de esa empresa
+        if (user.idEmpresa) {
+            proyectosQuery = query(collection(db, "proyectos"), where("id_empresa", "==", user.idEmpresa));
         } else {
             proyectosQuery = collection(db, "proyectos"); 
         }
@@ -160,9 +109,9 @@ window.cargarProyectos = async function() {
         if(querySnapshot.empty) {
             html = '<p class="text-slate-500 col-span-full">No tienes proyectos asignados en este momento.</p>';
         } else {
-            const proyectosPermitidosRaw = perfilUsuario ? (perfilUsuario.proyect_user || "") : "";
-            const listaPermitidos = proyectosPermitidosRaw.split(/[,;]/).map(p => p.trim()).filter(p => p !== "");
-            const esAdmin = perfilUsuario && perfilUsuario.rol_user === "Admin";
+            // Filtramos qué proyectos puede ver específicamente según su arreglo proyect_user
+            const listaPermitidos = user.proyectosPermitidos ? user.proyectosPermitidos.split(/[,;]/).map(p => p.trim()).filter(p => p !== "") : [];
+            const esAdmin = user.rolUser === "Admin";
 
             let proyectosMostrados = 0;
 
@@ -225,7 +174,6 @@ window.cargarApps = async function(idProyecto) {
             
             if (docApp.exists()) {
                 const a = docApp.data();
-                
                 html += `
                 <button onclick="window.abrirApp('${a.archivohtml_app}', '${idApp}')" class="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-300 transition-all flex flex-col items-center text-center group w-full">
                     <div class="w-16 h-16 bg-corpBlue-50 text-corpBlue-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-corpBlue-500 group-hover:text-white transition-colors">
@@ -236,7 +184,6 @@ window.cargarApps = async function(idProyecto) {
                 </button>`;
             }
         }
-
         contenedor.innerHTML = html || '<p class="text-slate-500 col-span-full">No se encontraron los datos de las aplicaciones.</p>';
 
     } catch (error) {
@@ -269,36 +216,6 @@ window.abrirApp = function(archivoHtml, idApp) {
         alert("Error: El archivo HTML de esta aplicación no está definido.");
         return;
     }
+    // Redirige pasando el projectId en la URL; el app_core de la siguiente vista se encargará de descargar sus metadatos
     window.location.href = archivoHtml + "?projectId=" + encodeURIComponent(proyectoActual) + "&appId=" + encodeURIComponent(idApp);
-};
-
-// --- UTILIDADES ---
-function cerrarSesion() {
-    signOut(auth).then(() => {
-        document.getElementById('user-menu').classList.add('hidden');
-        usuarioActual = null;
-        perfilUsuario = null;
-        proyectoActual = null;
-        appActual = null;
-        
-        document.getElementById('navbar-global').classList.add('hidden');
-        document.getElementById('bloque-proyectos').classList.add('hidden');
-        document.getElementById('bloque-apps').classList.add('hidden');
-        document.getElementById('bloque-login').classList.remove('hidden');
-    });
-}
-
-window.toggleSidebar = function() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebar-overlay');
-    if(sidebar && overlay) {
-        sidebar.classList.toggle('-translate-x-full');
-        sidebar.classList.toggle('translate-x-0');
-        overlay.classList.toggle('hidden');
-    }
-};
-
-window.toggleUserMenu = function() {
-    const menu = document.getElementById('user-menu');
-    if(menu) menu.classList.toggle('hidden');
 };

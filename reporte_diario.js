@@ -1,91 +1,64 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, updateDoc, arrayUnion, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL, getBlob } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+// ==========================================
+// reporte_diario.js - REFACTORIZADO (Con app_core)
+// ==========================================
 
-const firebaseConfig = {
-    apiKey: "AIzaSyCiTCag6lwIZcwjnAHPDf0ANaBX0B7DYlY",
-    authDomain: "indexscorp.firebaseapp.com",
-    projectId: "indexscorp",
-    storageBucket: "indexscorp.firebasestorage.app",
-    messagingSenderId: "925382774481",
-    appId: "1:925382774481:web:19a3bcbc23bfc89fecbff0"
-};
+// 1. Importaciones optimizadas (usamos auth, db y initAppCore del núcleo central)
+import { auth, db, initAppCore } from "./app_core.js";
+import { doc, getDoc, updateDoc, arrayUnion, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";// Inicializar Storage usando la app por defecto ya conectada en app_core
+const storage = getStorage();
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-const urlParams = new URLSearchParams(window.location.search);
-const PROJECT_ID = urlParams.get('projectId');
-
-window.APP_STATE = { frentes: [], especialidades: [], rubrosMap: {}, nombreProyecto: "" };
 let ubicacionGPS = "-0.00000, -0.00000";
 
+// --- INICIALIZACIÓN DE LA MICRO-APP ---
 document.addEventListener("DOMContentLoaded", () => {
-    if (!PROJECT_ID) {
-        alert("⚠️ Acceso denegado. No se seleccionó un proyecto.");
-        window.location.href = "index.html"; return;
-    }
+    // Llamamos al Core indicando 'true' (exigimos contexto de proyecto)
+    initAppCore(true).then((estadoGlobal) => {
+        
+        if (!estadoGlobal || !estadoGlobal.proyectoActivo || !estadoGlobal.proyectoActivo.id) {
+            alert("⚠️ Acceso denegado. No se seleccionó un proyecto válido.");
+            window.location.href = "index.html"; 
+            return;
+        }
 
-    onAuthStateChanged(auth, async (user) => {
         const pantallaCarga = document.getElementById('pantalla-carga');
         const mainContent = document.getElementById('main-content');
         const navbarGlobal = document.getElementById('navbar-global');
 
-        if (user) {
-            // Obtener perfil del usuario desde Firestore
-            let perfilUsuario = null;
-            try {
-                const userDocSnap = await getDoc(doc(db, "usuarios", user.uid));
-                if (userDocSnap.exists()) {
-                    perfilUsuario = userDocSnap.data();
-                }
-            } catch (e) {
-                console.error("Error obteniendo perfil de usuario", e);
-            }
+        // Configuración de Fechas Automáticas
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
 
-            // Guardar el ID de la empresa a nivel global para inyectar la plantilla luego
-            window.APP_STATE.idEmpresaUsuario = perfilUsuario ? perfilUsuario.id_empresa : null;
+        ['dateField', 'prevDateField', 'envioDateField', 'editDateField'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = today;
+        });
 
-            // Actualizar interfaz del menú superior
-            const nombreMostrar = perfilUsuario && perfilUsuario.name_user ? perfilUsuario.name_user : user.email.split('@')[0];
-            const iniciales = nombreMostrar.substring(0, 2).toUpperCase();
-            const rolMostrar = perfilUsuario && perfilUsuario.rol_user ? perfilUsuario.rol_user : "Personal";
-            
-            document.getElementById('nav-user-initials').innerText = iniciales;
-            document.getElementById('dropdown-user-name').innerText = nombreMostrar;
-            const rolEl = document.getElementById('dropdown-user-rol');
-            if (rolEl) rolEl.innerText = rolMostrar;
-            
-            // Fechas
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const today = `${year}-${month}-${day}`;
-
-            ['dateField', 'prevDateField', 'envioDateField', 'editDateField'].forEach(id => {
-                const el = document.getElementById(id);
-                if(el) { el.value = today; }
-            });
-
-            await cargarConfiguracionProyecto();
-            window.addActividadRow();
-            window.addPersonnelRow();
-            window.addAnotacionRow();
-            obtenerUbicacion();
-
-            // Ocultar carga y mostrar contenido
-            if (pantallaCarga) pantallaCarga.classList.add('hidden');
-            if (navbarGlobal) navbarGlobal.classList.remove('hidden');
-            if (mainContent) mainContent.classList.remove('hidden');
-
-        } else {
-            alert("⚠️ Sesión expirada. Redirigiendo al portal.");
-            window.location.href = "index.html";
+        // NUEVO: Autollenar firma y bloquear campo
+        const inputFirma = document.getElementById("pdfFirma");
+        if (inputFirma) {
+            inputFirma.value = estadoGlobal.user.nombre;
+            inputFirma.readOnly = true; // Bloquea la edición
+            inputFirma.classList.add("bg-slate-100", "text-slate-600", "cursor-not-allowed"); // Estilo de bloqueado
         }
+
+        // Carga de constructores de UI (Las listas ahora se leen de APP_STATE.proyectoActivo)
+        window.addActividadRow();
+        window.addPersonnelRow();
+        window.addAnotacionRow();
+        obtenerUbicacion();
+
+        // Ocultar carga y mostrar contenido
+        if (pantallaCarga) pantallaCarga.classList.add('hidden');
+        if (navbarGlobal) navbarGlobal.classList.remove('hidden');
+        if (mainContent) mainContent.classList.remove('hidden');
+
+    }).catch(error => {
+        console.error("Error al iniciar Reporte Diario:", error);
+        alert("Ocurrió un error al cargar el contexto del proyecto.");
     });
 });
 
@@ -101,60 +74,7 @@ function obtenerUbicacion() {
     );
 }
 
-async function cargarConfiguracionProyecto() {
-    try {
-        const docRef = doc(db, "proyectos", PROJECT_ID);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            
-            window.APP_STATE.nombreProyecto = data.name_proyect || PROJECT_ID;
-            window.APP_STATE.clienteProyecto = data.client_proyect || "";
-            window.APP_STATE.contratistaProyecto = data.contratista_proyect || "";
-            window.APP_STATE.supervisionProyecto = data.supervision_proyect || "";
-            window.APP_STATE.ubicacionProyecto = data.ubi_proyect || "";
-            window.APP_STATE.idEmpresa = data.id_empresa || "";
-            
-            // Consultar la colección relacional "empresas" usando id_empresa
-            if (window.APP_STATE.idEmpresa) {
-                const empRef = doc(db, "empresas", window.APP_STATE.idEmpresa);
-                const empSnap = await getDoc(empRef);
-                if (empSnap.exists()) {
-                    const empData = empSnap.data();
-                    window.APP_STATE.logoEmpresa = empData.logo_empresa || "";
-                    window.APP_STATE.nombreEmpresa = empData.nombre_empresa || "";
-                }
-            }
-
-            window.APP_STATE.correosPara = data.correos_Para || "";
-            window.APP_STATE.correosCC = data.correos_cc || "";
-
-            const nameEl = document.getElementById('sidebar-project-name');
-            if (nameEl) nameEl.innerText = window.APP_STATE.nombreProyecto;
-
-            window.APP_STATE.frentes = data.frentes || [];
-            window.APP_STATE.especialidades = data.especialidad || [];
-            window.APP_STATE.rubrosMap = data.rubrosmap || {};
-        } else {
-            alert("El proyecto no existe en la base de datos.");
-        }
-    } catch (error) {
-        console.error("Error cargando configuración:", error);
-    }
-}
-
 // --- FUNCIONES UI Y NAVEGACIÓN ---
-window.toggleSidebar = function() { 
-    document.getElementById('sidebar').classList.toggle('-translate-x-full'); 
-    document.getElementById('sidebar').classList.toggle('translate-x-0'); 
-    document.getElementById('sidebar-overlay').classList.toggle('hidden'); 
-};
-
-window.toggleUserMenu = function() { 
-    document.getElementById('user-menu').classList.toggle('hidden'); 
-};
-
 window.switchTab = function(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => { 
         b.classList.remove('active', 'bg-corpBlue-600', 'text-white', 'border-corpBlue-600'); 
@@ -179,7 +99,7 @@ window.toggleModalConfig = function() {
     if (!isHidden) {
         const selectEsp = document.getElementById('modalEspecialidad');
         let options = '<option value="" disabled selected>Seleccione especialidad...</option>';
-        window.APP_STATE.especialidades.forEach(e => {
+        window.APP_STATE.proyectoActivo.especialidades.forEach(e => {
             options += `<option value="${e}">${e}</option>`;
         });
         selectEsp.innerHTML = options;
@@ -196,8 +116,8 @@ window.actualizarRubrosSelect = function(selectEsp) {
     const selectRubro = selectEsp.closest('.pers-card').querySelector('.pers-rubro');
     const esp = selectEsp.value;
     selectRubro.innerHTML = '<option value="" disabled selected>Rubro</option>';
-    if(window.APP_STATE.rubrosMap[esp]) {
-        window.APP_STATE.rubrosMap[esp].forEach(r => {
+    if(window.APP_STATE.proyectoActivo.rubrosMap[esp]) {
+        window.APP_STATE.proyectoActivo.rubrosMap[esp].forEach(r => {
             selectRubro.innerHTML += `<option value="${r}">${r}</option>`;
         });
     }
@@ -208,17 +128,6 @@ window.changeQty = function(btn, delta) {
     let val = parseInt(input.value) || 0;
     if((val + delta) >= 1) input.value = val + delta;
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-    const btnLogout = document.getElementById('btn-logout');
-    if (btnLogout) {
-        btnLogout.addEventListener('click', () => {
-            signOut(auth).then(() => {
-                window.location.href = "index.html";
-            });
-        });
-    }
-});
 
 // --- CONSTRUCTORES DE FILAS EN PANTALLA ---
 window.addActividadRow = function(texto = "") {
@@ -260,13 +169,134 @@ window.addActividadRow = function(texto = "") {
     document.getElementById('actividadesContainer').appendChild(div);
 };
 
-window.toggleModalFotosDia = function() {
-    document.getElementById('modal-fotos-dia').classList.toggle('hidden');
+// --- LÓGICA DE GALERÍA EN LA NUBE (FIREBASE STORAGE) ---
+let btnDestinoGaleria = null; // Guarda temporalmente qué actividad pidió la foto
+
+window.abrirModalFotosDia = async function(btn) {
+    btnDestinoGaleria = btn;
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
+    
+    // Determinar qué fecha usar (depende si estamos en la pestaña de ingreso o edición)
+    const esEdicion = btn.closest('#resultadosEdicion') !== null;
+    const fechaInput = esEdicion ? document.getElementById('editDateField').value : document.getElementById('dateField').value;
+    
+    if(!fechaInput) return alert("Seleccione una fecha primero para buscar las fotos.");
+
+    // Inyectar el modal visual si no existe en el HTML
+    crearModalGaleriaSiNoExiste();
+    
+    const modal = document.getElementById('modal-fotos-dia');
+    const grid = document.getElementById('galeria-grid');
+    const loading = document.getElementById('galeria-loading');
+    
+    modal.classList.remove('hidden');
+    grid.innerHTML = '';
+    loading.classList.remove('hidden');
+
+    try {
+        // Consultar directamente a la base de datos Firestore (Unificado)
+        const docId = fechaInput + "_" + PROJECT_ID;
+        const galeriaRef = doc(db, "registro_fotos", docId);
+        const galeriaSnap = await getDoc(galeriaRef);
+        
+        loading.classList.add('hidden');
+
+        if (!galeriaSnap.exists() || !galeriaSnap.data().fotos || galeriaSnap.data().fotos.length === 0) {
+            grid.innerHTML = `
+                <div class="col-span-full text-center py-8">
+                    <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">image_not_supported</span>
+                    <p class="text-slate-500 font-bold">No hay fotos en la base de datos para el día ${fechaInput}.</p>
+                    <p class="text-xs text-slate-400 mt-1">Usa la aplicación "Registro Fotográfico" para subir imágenes a esta fecha.</p>
+                </div>`;
+            return;
+        }
+
+        // Si hay documento, extraemos el arreglo de fotos
+        const fotosRegistradas = galeriaSnap.data().fotos;
+
+        fotosRegistradas.forEach(fotoObj => {
+            grid.innerHTML += `
+                <div class="relative aspect-video rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:ring-4 ring-corpBlue-500 transition group" onclick="window.seleccionarFotoGaleria('${fotoObj.url}')">
+                    <img src="${fotoObj.url}" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-corpBlue-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                        <span class="material-symbols-outlined text-white text-3xl">check_circle</span>
+                    </div>
+                </div>
+            `;
+        });
+
+    } catch (error) {
+        console.error("Error al consultar Firestore:", error);
+        loading.classList.add('hidden');
+        grid.innerHTML = '<p class="text-red-500 col-span-full text-center py-4 font-bold">Error al conectar con la base de datos.</p>';
+    }
 };
 
-window.abrirModalFotosDia = function(btn) {
-    alert("La consulta de fotos del día se implementará en la siguiente fase.");
+window.seleccionarFotoGaleria = function(url) {
+    if(!btnDestinoGaleria) return;
+    
+    const card = btnDestinoGaleria.closest('.act-card');
+    const container = card.querySelector('.foto-preview-container');
+    
+    // Asignamos la URL de la nube directamente (omitimos Base64 para ahorrar espacio)
+    container.querySelector('.act-preview-img').src = url;
+    container.querySelector('.act-foto-url').value = url;
+    container.querySelector('.act-foto-base64').value = ""; 
+    
+    container.classList.remove('hidden');
+    window.cerrarModalGaleria();
 };
+
+window.cerrarModalGaleria = function() {
+    const modal = document.getElementById('modal-fotos-dia');
+    if(modal) modal.classList.add('hidden');
+};
+
+function crearModalGaleriaSiNoExiste() {
+    // 1. SOLUCIÓN: Buscar y DESTRUIR el modal viejo que quedó en el HTML
+    const modalViejo = document.getElementById('modal-fotos-dia');
+    if (modalViejo) {
+        modalViejo.remove();
+    }
+
+    // 2. Construir e inyectar el modal nuevo y correcto
+    const html = `
+        <div id="modal-fotos-dia" class="fixed inset-0 bg-slate-900/80 z-[100] hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden transform transition-all">
+                
+                <!-- Cabecera -->
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                        <span class="material-symbols-outlined text-corpBlue-600">cloud_done</span> Fotos en la Nube
+                    </h3>
+                    <button onclick="window.cerrarModalGaleria()" class="text-slate-400 hover:text-red-500 bg-white hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center transition shadow-sm border border-slate-200">
+                        <span class="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                </div>
+                
+                <!-- Contenido -->
+                <div class="p-5 overflow-y-auto flex-grow relative bg-slate-100/50 min-h-[300px]">
+                    <div id="galeria-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-100/90 z-10 hidden backdrop-blur-sm">
+                        <span class="material-symbols-outlined animate-spin text-5xl text-corpBlue-600 mb-3">refresh</span>
+                        <span class="text-sm font-bold text-slate-600 uppercase tracking-widest">Sincronizando Base de Datos...</span>
+                    </div>
+                    <div id="galeria-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Las fotos se inyectan aquí -->
+                    </div>
+                </div>
+
+                <!-- Footer con botón Cancelar -->
+                <div class="p-4 border-t border-slate-100 bg-white flex justify-end">
+                    <button onclick="window.cerrarModalGaleria()" class="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition">
+                        Cancelar
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+}
 
 window.removerFoto = function(btn) {
     const container = btn.closest('.foto-preview-container');
@@ -286,9 +316,12 @@ window.previsualizarFoto = function(input) {
         
         reader.onload = function(e) {
             const img = new Image();
+            
             img.onload = function() {
                 const canvas = document.getElementById('photoCanvas');
-                const ctx = canvas.getContext('2d');
+                // Si el canvas no existe en el HTML, lo creamos en memoria temporalmente
+                const targetCanvas = canvas || document.createElement('canvas');
+                const ctx = targetCanvas.getContext('2d');
                 
                 const MAX_WIDTH = 1920;
                 let width = img.width;
@@ -299,24 +332,14 @@ window.previsualizarFoto = function(input) {
                     width = MAX_WIDTH;
                 }
                 
-                canvas.width = width;
-                canvas.height = height;
+                targetCanvas.width = width;
+                targetCanvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
 
+                // --- TEXTO (Metadatos de la foto) ---
                 const fontSize = Math.max(12, Math.floor(height * 0.02)); 
-                const logoImg = document.getElementById('logoImage');
-                let logoHeight = height * 0.06; 
-                let logoWidth = 0;
-                let logoX = width * 0.03;
                 const interlineado = fontSize * 1.5; 
-                const bloqueTextoHeight = interlineado * 4;
-                let logoY = height - (bloqueTextoHeight + logoHeight + (height * 0.04));
-
-                if(logoImg.complete && logoImg.naturalHeight !== 0) {
-                     const aspectRatio = logoImg.naturalWidth / logoImg.naturalHeight;
-                     logoWidth = logoHeight * aspectRatio;
-                     ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
-                }
+                const logoX = width * 0.03;
                 
                 ctx.font = `${fontSize}px sans-serif`; 
                 ctx.fillStyle = "white";
@@ -324,49 +347,89 @@ window.previsualizarFoto = function(input) {
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                
-                const textX = logoX;
-                let textY = logoY + logoHeight + (interlineado * 0.8); 
 
-                ctx.fillText("Haelservice", textX, textY);
-                textY += interlineado;
-                
-                ctx.fillText(window.APP_STATE.nombreProyecto.substring(0, 40), textX, textY);
-                textY += interlineado;
-                
-                const fechaSeleccionada = document.getElementById('dateField').value;
-                const partes = fechaSeleccionada.split('-'); 
-                const fechaFormat = partes.length === 3 ? `${partes[2]}.${partes[1]}.${partes[0]}` : fechaSeleccionada;
-                const horas = String(new Date().getHours()).padStart(2, '0');
-                const minutos = String(new Date().getMinutes()).padStart(2, '0');
-                const fechaStr = `${fechaFormat} ${horas}:${minutos}`;
-                
-                ctx.fillText(fechaStr, textX, textY);
-                textY += interlineado;
-                
-                ctx.fillText(ubicacionGPS, textX, textY);
-                ctx.shadowColor = "transparent";
+                // --- FUNCIÓN INTERNA PARA SELLAR Y GUARDAR ---
+                const sellarFoto = (logoHeightPx, logoWidthPx, logoObject) => {
+                    const bloqueTextoHeight = interlineado * 4;
+                    // Posicionamos el inicio desde abajo hacia arriba
+                    let currentY = height - (bloqueTextoHeight + logoHeightPx + (height * 0.04));
 
-                const base64Generado = canvas.toDataURL("image/jpeg", 0.85);
+                    // 1. Dibujar el logo (si existe)
+                    if (logoObject) {
+                        ctx.drawImage(logoObject, logoX, currentY, logoWidthPx, logoHeightPx);
+                    }
+                    
+                    // Bajamos el cursor para empezar a escribir debajo del logo
+                    let textY = currentY + logoHeightPx + (interlineado * 0.8); 
 
-                const container = input.closest('.act-card').querySelector('.foto-preview-container');
-                container.classList.remove('hidden');
-                container.querySelector('.act-preview-img').src = base64Generado;
-                container.querySelector('.act-foto-base64').value = base64Generado;
-                container.querySelector('.act-foto-url').value = ''; 
-            }
+                    // 2. Nombre Empresa
+                    ctx.fillText(window.APP_STATE.empresa.nombre || "Empresa Contratista", logoX, textY);
+                    textY += interlineado;
+                    
+                    // 3. Proyecto
+                    ctx.fillText((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), logoX, textY);
+                    textY += interlineado;
+                    
+                    // 4. Fecha y Hora
+                    const fechaSeleccionada = document.getElementById('dateField').value;
+                    const partes = fechaSeleccionada.split('-'); 
+                    const fechaFormat = partes.length === 3 ? `${partes[2]}.${partes[1]}.${partes[0]}` : fechaSeleccionada;
+                    const horas = String(new Date().getHours()).padStart(2, '0');
+                    const minutos = String(new Date().getMinutes()).padStart(2, '0');
+                    ctx.fillText(`${fechaFormat} ${horas}:${minutos}`, logoX, textY);
+                    textY += interlineado;
+                    
+                    // 5. Coordenadas GPS
+                    ctx.fillText(ubicacionGPS, logoX, textY);
+                    
+                    // Resetear sombra para no afectar futuras operaciones
+                    ctx.shadowColor = "transparent";
+
+                    // 6. Generar Base64 final y actualizar HTML
+                    const base64Generado = targetCanvas.toDataURL("image/jpeg", 0.85);
+                    const container = input.closest('.act-card').querySelector('.foto-preview-container');
+                    container.classList.remove('hidden');
+                    container.querySelector('.act-preview-img').src = base64Generado;
+                    container.querySelector('.act-foto-base64').value = base64Generado;
+                    container.querySelector('.act-foto-url').value = ''; 
+                };
+
+                // --- DESCARGAR LOGO DESDE CACHÉ (NUEVA LÓGICA) ---
+                const logoUrl = window.APP_STATE.empresa.logo;
+                if (logoUrl) {
+                    const watermarkObj = new Image();
+                    watermarkObj.crossOrigin = "Anonymous"; // Crucial para evitar error de CORS al leer de Firebase Storage
+                    
+                    watermarkObj.onload = function() {
+                        const aspect = watermarkObj.naturalWidth / watermarkObj.naturalHeight;
+                        const targetLogoHeight = height * 0.06; // 6% de la altura total de la foto
+                        const targetLogoWidth = targetLogoHeight * aspect;
+                        
+                        sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
+                    };
+                    
+                    watermarkObj.onerror = function() {
+                        console.warn("No se pudo cargar el logo para la marca de agua. Sellando solo con texto.");
+                        sellarFoto(0, 0, null);
+                    };
+                    
+                    watermarkObj.src = logoUrl;
+                } else {
+                    // Si la empresa no tiene logo asignado
+                    sellarFoto(0, 0, null);
+                }
+            };
             img.src = e.target.result;
-        }
+        };
         reader.readAsDataURL(file);
     }
 };
-
 window.addPersonnelRow = function() {
     let eOpt = '<option value="" disabled selected>Especialidad</option>';
-    window.APP_STATE.especialidades.forEach(e => eOpt += `<option value="${e}">${e}</option>`);
+    window.APP_STATE.proyectoActivo.especialidades.forEach(e => eOpt += `<option value="${e}">${e}</option>`);
     
     let fOpt = '<option value="" disabled selected>Frente</option>';
-    window.APP_STATE.frentes.forEach(f => fOpt += `<option value="${f}">${f}</option>`);
+    window.APP_STATE.proyectoActivo.frentes.forEach(f => fOpt += `<option value="${f}">${f}</option>`);
 
     const div = document.createElement('div');
     div.className = 'bg-slate-50 p-4 rounded-xl border border-slate-200 relative mb-4 pers-card';
@@ -386,14 +449,13 @@ window.addPersonnelRow = function() {
     document.getElementById('personnelContainer').appendChild(div);
 };
 
-window.recargarSelectsManual = async function(btn) {
+window.recargarSelectsManual = function(btn) {
     const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Cargando...`;
+    btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Actualizando...`;
     btn.disabled = true;
 
     try {
-        await cargarConfiguracionProyecto();
-
+        // En lugar de ir a Firebase, ahora simplemente re-renderizamos con los datos actualizados en caché
         document.querySelectorAll('.pers-card').forEach(card => {
             const selectEsp = card.querySelector('.pers-especialidad');
             const selectRubro = card.querySelector('.pers-rubro');
@@ -404,22 +466,22 @@ window.recargarSelectsManual = async function(btn) {
             const valFrente = selectFrente.value;
 
             let eOpt = '<option value="" disabled>Especialidad</option>';
-            window.APP_STATE.especialidades.forEach(e => {
+            window.APP_STATE.proyectoActivo.especialidades.forEach(e => {
                 eOpt += `<option value="${e}">${e}</option>`;
             });
             selectEsp.innerHTML = eOpt;
             if (valEsp) selectEsp.value = valEsp;
 
             let fOpt = '<option value="" disabled>Frente</option>';
-            window.APP_STATE.frentes.forEach(f => {
+            window.APP_STATE.proyectoActivo.frentes.forEach(f => {
                 fOpt += `<option value="${f}">${f}</option>`;
             });
             selectFrente.innerHTML = fOpt;
             if (valFrente) selectFrente.value = valFrente;
 
-            if (valEsp && window.APP_STATE.rubrosMap[valEsp]) {
+            if (valEsp && window.APP_STATE.proyectoActivo.rubrosMap[valEsp]) {
                 let rOpt = '<option value="" disabled>Rubro</option>';
-                window.APP_STATE.rubrosMap[valEsp].forEach(r => {
+                window.APP_STATE.proyectoActivo.rubrosMap[valEsp].forEach(r => {
                     rOpt += `<option value="${r}">${r}</option>`;
                 });
                 selectRubro.innerHTML = rOpt;
@@ -461,7 +523,10 @@ function dataURItoBlob(dataURI) {
     return new Blob([ab], {type: mimeString});
 }
 
+// --- SUMISIONES A BASE DE DATOS ---
+
 window.submitActividad = async function(btn) {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fechaInput = document.getElementById('dateField').value;
     const card = btn.closest('.act-card');
     const txt = card.querySelector('.act-texto').value;
@@ -481,7 +546,7 @@ window.submitActividad = async function(btn) {
         if (fotoBase64 && !fotoUrlExistente) {
             btn.innerHTML = "Subiendo imagen...";
             const blob = dataURItoBlob(fotoBase64);
-            const storagePath = `reportes_fotos/${PROJECT_ID}/${fechaInput}_${Date.now()}.jpg`;
+            const storagePath = `registro_fotos/${PROJECT_ID}/${fechaInput}_${Date.now()}.jpg`;
             const storageRef = ref(storage, storagePath);
             await uploadBytes(storageRef, blob);
             finalFotoUrl = await getDownloadURL(storageRef);
@@ -490,7 +555,9 @@ window.submitActividad = async function(btn) {
         btn.innerHTML = "Guardando en Firestore...";
         const docId = fechaInput + "_" + PROJECT_ID;
         const reporteRef = doc(db, "reportes_diarios", docId);
-        const usuarioActual = auth.currentUser ? auth.currentUser.email : "desconocido@indexscorp.com";
+        
+        // Obtenemos al usuario que está guardando directamente de la caché
+        const usuarioFirma = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
 
         const nuevaActividad = {
             id_act: "ACT_" + Date.now().toString(36),
@@ -501,7 +568,7 @@ window.submitActividad = async function(btn) {
         await setDoc(reporteRef, {
             id_proyect: PROJECT_ID,
             fecha_proyect: fechaInput,
-            creadopor_proyect: usuarioActual,
+            creadopor_proyect: usuarioFirma,
             actividades: arrayUnion(nuevaActividad)
         }, { merge: true });
 
@@ -522,6 +589,7 @@ window.submitActividad = async function(btn) {
 };
 
 window.submitPersonal = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fechaInput = document.getElementById('dateField').value;
     if(!fechaInput) return alert("Ingrese la fecha del reporte.");
 
@@ -553,12 +621,12 @@ window.submitPersonal = async function() {
     try {
         const docId = fechaInput + "_" + PROJECT_ID;
         const reporteRef = doc(db, "reportes_diarios", docId);
-        const usuarioActual = auth.currentUser ? auth.currentUser.email : "desconocido@indexscorp.com";
+        const usuarioFirma = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
 
         await setDoc(reporteRef, {
             id_proyect: PROJECT_ID,
             fecha_proyect: fechaInput,
-            creadopor_proyect: usuarioActual,
+            creadopor_proyect: usuarioFirma,
             personal: arrayUnion(...personalArray)
         }, { merge: true });
 
@@ -579,6 +647,7 @@ window.submitPersonal = async function() {
 };
 
 window.submitAnotaciones = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fechaInput = document.getElementById('dateField').value;
     if(!fechaInput) return alert("Ingrese la fecha del reporte.");
 
@@ -606,12 +675,12 @@ window.submitAnotaciones = async function() {
     try {
         const docId = fechaInput + "_" + PROJECT_ID;
         const reporteRef = doc(db, "reportes_diarios", docId);
-        const usuarioActual = auth.currentUser ? auth.currentUser.email : "desconocido@indexscorp.com";
+        const usuarioFirma = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
 
         await setDoc(reporteRef, {
             id_proyect: PROJECT_ID,
             fecha_proyect: fechaInput,
-            creadopor_proyect: usuarioActual,
+            creadopor_proyect: usuarioFirma,
             anotaciones: arrayUnion(...anotacionesArray)
         }, { merge: true });
 
@@ -632,6 +701,7 @@ window.submitAnotaciones = async function() {
 };
 
 window.guardarNuevaConfiguracion = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const tipo = document.getElementById('modalTipo').value;
     const btn = document.getElementById('btnGuardarConfig');
     const origText = btn.innerHTML;
@@ -651,6 +721,11 @@ window.guardarNuevaConfiguracion = async function() {
             await updateDoc(projRef, {
                 [`rubrosmap.${esp}`]: arrayUnion(rubro)
             });
+
+            // Actualizamos la caché local sin tener que consultar a Firebase de nuevo
+            if(!window.APP_STATE.proyectoActivo.rubrosMap[esp]) window.APP_STATE.proyectoActivo.rubrosMap[esp] = [];
+            window.APP_STATE.proyectoActivo.rubrosMap[esp].push(rubro);
+
         } else {
             const frente = document.getElementById('modalFrente').value.trim();
             if (!frente) return alert("Ingrese el nombre del frente.");
@@ -658,19 +733,21 @@ window.guardarNuevaConfiguracion = async function() {
             await updateDoc(projRef, {
                 frentes: arrayUnion(frente)
             });
+
+            // Actualizamos la caché local
+            window.APP_STATE.proyectoActivo.frentes.push(frente);
         }
+
+        // Guardamos el cambio en localStorage
+        localStorage.setItem("INDEX_APP_STATE", JSON.stringify(window.APP_STATE));
 
         window.toggleModalConfig();
         document.getElementById('modalRubro').value = "";
         document.getElementById('modalFrente').value = "";
 
-        await cargarConfiguracionProyecto();
+        const tempBtn = document.createElement("button");
+        window.recargarSelectsManual(tempBtn);
         
-        if (typeof window.recargarSelectsManual === "function") {
-            const tempBtn = document.createElement("button");
-            await window.recargarSelectsManual(tempBtn);
-        }
-
         alert("✅ Configuración actualizada correctamente.");
 
     } catch (error) {
@@ -690,6 +767,7 @@ window.CURRENT_EDIT_DOC = null;
 window.CURRENT_EDIT_REF = null;
 
 window.buscarReporteEdicion = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fecha = document.getElementById('editDateField').value;
     if(!fecha) return alert("Seleccione una fecha para buscar.");
 
@@ -744,12 +822,6 @@ window.renderizarEdicion = function() {
                         <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-upload').click()">
                             <span class="material-symbols-outlined text-[18px]">upload_file</span> Subir
                         </button>
-                        <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="window.abrirModalFotosDia(this)">
-                            <span class="material-symbols-outlined text-[18px]">photo_library</span> Galería
-                        </button>
-                        
-                        <input type="file" class="act-camera hidden" accept="image/*" capture="environment" onchange="window.previsualizarFoto(this)">
-                        <input type="file" class="act-upload hidden" accept="image/*" onchange="window.previsualizarFoto(this)">
                     </div>
 
                     <div class="foto-preview-container ${act.urlfoto_act ? '' : 'hidden'} w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm">
@@ -773,18 +845,18 @@ window.renderizarEdicion = function() {
     if (data.personal && data.personal.length > 0) {
         const getEspOptions = (selected) => {
             let opt = '<option value="" disabled>Especialidad</option>';
-            window.APP_STATE.especialidades.forEach(e => opt += `<option value="${e}" ${e === selected ? 'selected' : ''}>${e}</option>`);
+            window.APP_STATE.proyectoActivo.especialidades.forEach(e => opt += `<option value="${e}" ${e === selected ? 'selected' : ''}>${e}</option>`);
             return opt;
         };
         const getFrenteOptions = (selected) => {
             let opt = '<option value="" disabled>Frente</option>';
-            window.APP_STATE.frentes.forEach(f => opt += `<option value="${f}" ${f === selected ? 'selected' : ''}>${f}</option>`);
+            window.APP_STATE.proyectoActivo.frentes.forEach(f => opt += `<option value="${f}" ${f === selected ? 'selected' : ''}>${f}</option>`);
             return opt;
         };
         const getRubroOptions = (esp, selected) => {
             let opt = '<option value="" disabled>Rubro</option>';
-            if (window.APP_STATE.rubrosMap[esp]) {
-                window.APP_STATE.rubrosMap[esp].forEach(r => opt += `<option value="${r}" ${r === selected ? 'selected' : ''}>${r}</option>`);
+            if (window.APP_STATE.proyectoActivo.rubrosMap[esp]) {
+                window.APP_STATE.proyectoActivo.rubrosMap[esp].forEach(r => opt += `<option value="${r}" ${r === selected ? 'selected' : ''}>${r}</option>`);
             }
             return opt;
         };
@@ -846,6 +918,7 @@ window.renderizarEdicion = function() {
 };
 
 window.actualizarActividadEdicion = async function(btn, index) {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const card = btn.closest('.act-card');
     const nuevoTexto = card.querySelector('.act-texto').value;
     const fotoBase64 = card.querySelector('.act-foto-base64').value;
@@ -961,12 +1034,10 @@ window.eliminarElementoEdicion = async function(campoArreglo, index) {
 // SECCIÓN: PREVISUALIZAR Y GENERAR PDF (PESTAÑA 3) CON PDFMAKE
 // ==========================================
 
-// Helper para convertir cualquier URL remota a Base64 para pdfmake
 async function urlToBase64(url) {
     if (!url) return '';
     if (url.startsWith('data:image')) return url;
 
-    // Método 1: Fetch directo (Ahora que arreglaste el CORS, este funcionará perfecto)
     try {
         const response = await fetch(url);
         if (response.ok) {
@@ -982,7 +1053,6 @@ async function urlToBase64(url) {
         console.warn("Fetch directo falló, intentando Canvas...", e);
     }
 
-    // Método 2: Fallback por Canvas con Timeout de 5 segundos
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
@@ -1013,17 +1083,10 @@ async function urlToBase64(url) {
     });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    const firmaGuardada = localStorage.getItem("firmaResidente");
-    if (firmaGuardada) {
-        const inputFirma = document.getElementById("pdfFirma");
-        if(inputFirma) inputFirma.value = firmaGuardada;
-    }
-});
-
-let pdfBlobGenerado = null; // Variable global restaurada para guardar el Blob
+let pdfBlobGenerado = null; 
 
 window.accionGenerarPrevisualizacion = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fecha = document.getElementById('prevDateField').value;
     const firma = document.getElementById('pdfFirma').value.trim();
     const btn = document.getElementById('btnGenerarPrev');
@@ -1090,14 +1153,24 @@ window.accionGenerarPrevisualizacion = async function() {
             if (b64) fotosProcesadas.push({ base64: b64, texto: a.texto_act });
         }
 
-        // 3. Objeto de datos estandarizado para la plantilla
+        // 3. Objeto de datos estandarizado (usando APP_STATE)
         const datosPlantilla = {
-            logo: window.APP_STATE.logoEmpresa ? await urlToBase64(window.APP_STATE.logoEmpresa) : '',
-            nombreEmpresa: window.APP_STATE.nombreEmpresa || "", // <--- Utiliza la variable dinámica cargada desde empresas
-            nombreProyecto: window.APP_STATE.nombreProyecto,
-            cliente: window.APP_STATE.clienteProyecto,
-            contratista: window.APP_STATE.contratistaProyecto,
-            elaboradoPor: firma,
+            logo: window.APP_STATE.empresa.logo ? await urlToBase64(window.APP_STATE.empresa.logo) : '',
+            nombreEmpresa: window.APP_STATE.empresa.nombre || "Index Corp",
+            
+            // Datos del proyecto
+            nombreProyecto: window.APP_STATE.proyectoActivo.nombre,
+            cliente: window.APP_STATE.proyectoActivo.cliente,
+            contratista: window.APP_STATE.proyectoActivo.contratista,
+            supervision: window.APP_STATE.proyectoActivo.supervision,
+            
+            // Datos del usuario que está creando el reporte
+            elaboradoPor: window.APP_STATE.user.nombre,
+            cargoElaborador: window.APP_STATE.user.cargo, 
+            rolEmpresaUsuario: window.APP_STATE.user.rolEmpresa, 
+            firmaGrafica: window.APP_STATE.user.firmaUrl ? await urlToBase64(window.APP_STATE.user.firmaUrl) : null,
+            
+            // Documento
             fecha: fechaFmt,
             correlativo: correlativo,
             listaActividades: listaActividades,
@@ -1108,7 +1181,7 @@ window.accionGenerarPrevisualizacion = async function() {
 
         // 4. Importar dinámicamente la plantilla PDFMake
         let generarDocDefinition;
-        const idEmpresa = window.APP_STATE.idEmpresaUsuario || 'default';
+        const idEmpresa = window.APP_STATE.empresa.id || 'EMP00001';
         try {
             const modulo = await import(`./js/templates/reporte_diario/${idEmpresa}.js`);
             generarDocDefinition = modulo.generarDocDefinition;
@@ -1122,7 +1195,7 @@ window.accionGenerarPrevisualizacion = async function() {
         const pdfDoc = pdfMake.createPdf(docDefinition);
         
         pdfDoc.getBlob((blob) => {
-            pdfBlobGenerado = blob; // Guardamos el blob en memoria para la subida
+            pdfBlobGenerado = blob;
             const pdfUrl = URL.createObjectURL(blob);
             
             document.getElementById('pdfPlaceholder').classList.add('hidden');
@@ -1143,11 +1216,10 @@ window.accionGenerarPrevisualizacion = async function() {
             }
             rootCont.classList.remove('hidden');
 
-            // Restaurar botón de guardado oficial
             const btnGuardar = document.getElementById('btnGuardarOficial');
             btnGuardar.classList.remove('hidden');
             btnGuardar.classList.add('flex');
-            btnGuardar.onclick = window.accionGuardarPDFDefinitivo; // Restauramos la subida a Firebase
+            btnGuardar.onclick = window.accionGuardarPDFDefinitivo;
             btnGuardar.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Generar PDF / Guardar Oficialmente`;
         });
 
@@ -1160,8 +1232,8 @@ window.accionGenerarPrevisualizacion = async function() {
     }
 };
 
-// GUARDADO AUTOMÁTICO DEL BLOB A FIREBASE STORAGE
 window.accionGuardarPDFDefinitivo = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fecha = document.getElementById('prevDateField').value;
     const btn = document.getElementById('btnGuardarOficial');
 
@@ -1172,54 +1244,7 @@ window.accionGuardarPDFDefinitivo = async function() {
     btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">cloud_upload</span> Subiendo a Firebase...`;
 
     try {
-        const storagePath = `reportes_pdfs/${PROJECT_ID}/${fecha}_RD_${window.APP_STATE.nombreProyecto}.pdf`;
-        const storageRef = ref(storage, storagePath);
-        
-        await uploadBytes(storageRef, pdfBlobGenerado);
-        const urlPDFDescarga = await getDownloadURL(storageRef);
-
-        const docId = fecha + "_" + PROJECT_ID;
-        const reporteRef = doc(db, "reportes_diarios", docId);
-        const partesFecha = fecha.split('-');
-        const correlativoNum = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
-
-        await setDoc(reporteRef, {
-            url_pdf_oficial: urlPDFDescarga,
-            num_registro_oficial: correlativoNum,
-            fecha_guardado_pdf: new Date().toISOString()
-        }, { merge: true });
-
-        document.getElementById('envioDateField').value = fecha;
-        window.cargarDatosMensajeria();
-
-        btn.innerHTML = "✅ PDF Guardado Oficialmente";
-        alert(`✅ PDF vectorial compilado y registrado en Firebase Storage exitosamente.`);
-
-    } catch (error) {
-        console.error("Error al guardar PDF:", error);
-        alert("Error al guardar en Storage: " + error.message);
-    } finally {
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.innerHTML = origText;
-        }, 2000);
-    }
-};
-
-
-// GUARDADO AUTOMÁTICO DEL BLOB A FIREBASE STORAGE
-window.accionGuardarPDFDefinitivo = async function() {
-    const fecha = document.getElementById('prevDateField').value;
-    const btn = document.getElementById('btnGuardarOficial');
-
-    if (!pdfBlobGenerado) return alert("Primero debe generar la vista previa del PDF.");
-
-    const origText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">cloud_upload</span> Subiendo a Firebase...`;
-
-    try {
-        const storagePath = `reportes_pdfs/${PROJECT_ID}/${fecha}_RD_${window.APP_STATE.nombreProyecto}.pdf`;
+        const storagePath = `reportes_pdfs/${PROJECT_ID}/${fecha}_RD_${window.APP_STATE.proyectoActivo.nombre}.pdf`;
         const storageRef = ref(storage, storagePath);
         
         await uploadBytes(storageRef, pdfBlobGenerado);
@@ -1258,13 +1283,13 @@ window.accionGuardarPDFDefinitivo = async function() {
 // ==========================================
 
 window.cargarDatosMensajeria = async function() {
+    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const fecha = document.getElementById('envioDateField').value;
     if (!fecha) return alert("Seleccione una fecha para cargar el correo.");
 
     const partesFecha = fecha.split('-');
     if (partesFecha.length !== 3) return;
 
-    // Captura directa y segura por ID
     const btn = document.getElementById('btnCargarCorreo');
     const origText = btn ? btn.innerHTML : '';
     
@@ -1275,17 +1300,14 @@ window.cargarDatosMensajeria = async function() {
 
     const fechaFmt = `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0]}`;
     const correlativo = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
-    const projName = window.APP_STATE.nombreProyecto || PROJECT_ID;
+    const projName = window.APP_STATE.proyectoActivo.nombre || PROJECT_ID;
 
-    // 1. Llenar Asunto
     document.getElementById('envioAsunto').value = `REPORTE DIARIO DE OBRA - ${projName} - N° ${correlativo} (${fechaFmt})`;
 
-    // 2. Llenar Para y CC
     const formatEmails = (str) => str ? str.replace(/;/g, ',').replace(/\s+/g, '') : "";
-    document.getElementById('envioPara').value = formatEmails(window.APP_STATE.correosPara);
-    document.getElementById('envioCc').value = formatEmails(window.APP_STATE.correosCC);
+    document.getElementById('envioPara').value = formatEmails(window.APP_STATE.proyectoActivo.correosPara);
+    document.getElementById('envioCc').value = formatEmails(window.APP_STATE.proyectoActivo.correosCC);
 
-    // 3. Consultar PDF oficial guardado en Firestore
     let linkDescarga = "⚠️ (El PDF aún no ha sido generado/guardado en la pestaña PDF)";
 
     try {
@@ -1302,8 +1324,7 @@ window.cargarDatosMensajeria = async function() {
         console.warn("No se pudo obtener el PDF oficial de Firestore:", e);
     }
 
-    // 4. Llenar Cuerpo
-    document.getElementById('envioCuerpo').value = `Buenas tardes estimados,\n\nSe remite el Reporte Diario de Avance de Obra correspondiente a la fecha ${fechaFmt} para el proyecto ${projName}.\n\nPuede visualizar y descargar el documento oficial (PDF) desde el siguiente enlace seguro:\n${linkDescarga}\n\nQuedamos atentos a cualquier duda u observación.\n\nAtentamente,`;
+    document.getElementById('envioCuerpo').value = `Buenas tardes estimados,\n\nSe remite el Reporte Diario de Avance de Obra correspondiente a la fecha ${fechaFmt} para el proyecto ${projName}.\n\nPuede visualizar y descargar el documento oficial (PDF) desde el siguiente enlace seguro:\n${linkDescarga}\n\nQuedamos atentos a cualquier duda u observación.\n\nAtentamente,\n${window.APP_STATE.user.nombre}\n${window.APP_STATE.user.cargo}`;
 
     if (btn) {
         btn.innerHTML = origText;
@@ -1325,7 +1346,6 @@ window.accionEnviarCorreoDefinitivo = async function(proveedor) {
         }
     }
 
-    // Separamos por comas, codificamos cada correo individualmente y los volvemos a unir con comas reales
     const toEnc = para.split(',').map(e => encodeURIComponent(e.trim())).join(',');
     const ccEnc = cc ? cc.split(',').map(e => encodeURIComponent(e.trim())).join(',') : '';
     const suEnc = encodeURIComponent(asunto);
@@ -1333,7 +1353,6 @@ window.accionEnviarCorreoDefinitivo = async function(proveedor) {
 
     const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
-    // EL ORDEN ES CRÍTICO: El parámetro 'body' siempre debe ir al final
     let mailtoEstandar = `mailto:${toEnc}?`;
     if (ccEnc) mailtoEstandar += `cc=${ccEnc}&`;
     mailtoEstandar += `subject=${suEnc}&body=${bodyEnc}`;

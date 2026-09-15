@@ -1,6 +1,7 @@
 /**
- * Plantilla PDFMake para EMP00001 (Haelservice)
+ * Plantilla PDFMake para EMP00001
  * Repetición garantizada de títulos de sección en saltos de página
+ * Incluye bloque de firma gráfica, metadatos dinámicos y márgenes ajustados
  */
 export function generarDocDefinition(datos) {
     // 1. Estructura de Encabezado (Encabezado Azul)
@@ -25,31 +26,64 @@ export function generarDocDefinition(datos) {
         margin: [0, 0, 0, 3]
     });
 
-    // 2. Estructura de Metadatos (Cuadro de Cliente / Fecha)
-    const crearMetadata = () => ({
-        table: {
-            widths: ['65%', '35%'],
-            body: [[
-                {
-                    stack: [
-                        { text: [{ text: 'CLIENTE: ', bold: true }, (datos.cliente || '').toUpperCase()] },
-                        { text: [{ text: 'CONTRATISTA: ', bold: true }, (datos.contratista || '').toUpperCase()] },
-                        { text: [{ text: 'ELABORADO POR: ', bold: true }, (datos.elaboradoPor || '').toUpperCase()] }
-                    ],
-                    fontSize: 8, margin: [2, 2, 2, 2]
-                },
-                {
-                    stack: [
-                        { text: [{ text: 'FECHA: ', bold: true }, datos.fecha] },
-                        { text: [{ text: 'N° REGISTRO: ', bold: true }, { text: datos.correlativo, color: '#DC2626', bold: true }] }
-                    ],
-                    fontSize: 8, margin: [2, 2, 2, 2]
-                }
-            ]]
-        },
-        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
-        margin: [0, 0, 0, 0]
-    });
+    // 2. Estructura de Metadatos Dinámica (Cuadro de Cliente / Fecha / Cargo)
+    const crearMetadata = () => {
+        const lineasIzquierda = [];
+        
+        // 1. Cliente
+        if (datos.cliente) {
+            lineasIzquierda.push({ text: [{ text: 'CLIENTE: ', bold: true }, { text: datos.cliente.toUpperCase() }] });
+        }
+        
+        // 2. Supervisión
+        if (datos.supervision) {
+            lineasIzquierda.push({ text: [{ text: 'SUPERVISIÓN: ', bold: true }, { text: datos.supervision.toUpperCase() }] });
+        }
+        
+        // 3. Contratista / Subcontratista
+        let contratistaText = '';
+        if (datos.rolEmpresaUsuario === 'Subcontratista' && datos.nombreEmpresa) {
+           contratistaText = datos.nombreEmpresa.toUpperCase();
+        } else if (datos.contratista) {
+           contratistaText = datos.contratista.toUpperCase();
+        }
+        
+        if (contratistaText) {
+             lineasIzquierda.push({ text: [{ text: 'CONTRATISTA / SUBCONTRATISTA: ', bold: true }, { text: contratistaText }] });
+        }
+
+        // 4. Elaborado por
+        const nombreAutor = (datos.elaboradoPor || '').toUpperCase();
+        const cargoAutor = datos.cargoElaborador || 'Personal';
+        
+        lineasIzquierda.push({ 
+            text: [
+                { text: 'ELABORADO POR: ', bold: true }, 
+                { text: `${nombreAutor} (${cargoAutor})` }
+            ] 
+        });
+
+        return {
+            table: {
+                widths: ['65%', '35%'],
+                body: [[
+                    {
+                        stack: lineasIzquierda,
+                        fontSize: 8, margin: [2, 2, 2, 2]
+                    },
+                    {
+                        stack: [
+                            { text: [{ text: 'FECHA: ', bold: true }, datos.fecha] },
+                            { text: [{ text: 'N° REGISTRO: ', bold: true }, { text: datos.correlativo, color: '#DC2626', bold: true }] }
+                        ],
+                        fontSize: 8, margin: [2, 2, 2, 2]
+                    }
+                ]]
+            },
+            layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#1E293B', vLineColor: () => '#1E293B' },
+            margin: [0, 0, 0, 0]
+        };
+    };
 
     // Función que transforma cada ítem en una FILA INDEPENDIENTE para forzar la repetición del título
     const crearTablaLista = (titulo, listaItems, textoVacio) => {
@@ -67,8 +101,8 @@ export function generarDocDefinition(datos) {
 
         return {
             table: {
-                headerRows: 1, // Obliga a PDFMake a repetir la Fila 0 (Título) en caso de salto de página
-                dontBreakRows: true, // Evita que una sola viñeta se corte feo a la mitad
+                headerRows: 1, 
+                dontBreakRows: true, 
                 widths: ['*'],
                 body: body
             },
@@ -89,13 +123,11 @@ export function generarDocDefinition(datos) {
 
     // 3. Contenido Principal de Texto
     const docContent = [
-        // Sección 1: Actividades
         crearTablaLista('1. Actividades Realizadas', datos.listaActividades, 'Sin actividades registradas.'),
 
-        // Sección 2: Personal (Repite título y cabecera de columnas N°/Rubro si se corta)
         {
             table: {
-                headerRows: 2, // Repite Fila 0 (Título) y Fila 1 (N°, RUBRO, SECTOR, CANTIDAD)
+                headerRows: 2, 
                 dontBreakRows: true,
                 widths: [25, '*', '*', 60],
                 body: bodyPersonalConTitulo
@@ -109,9 +141,31 @@ export function generarDocDefinition(datos) {
             margin: [0, 4, 0, 4]
         },
 
-        // Sección 3: Anotaciones
         crearTablaLista('3. Anotaciones del Día / Observaciones', datos.listaAnotaciones, 'Sin anotaciones registradas.')
     ];
+
+    // --- NUEVO: BLOQUE DE FIRMA AL FINAL DEL TEXTO ---
+    const bloqueFirma = {
+        margin: [0, 30, 0, 10], 
+        stack: [],
+        unbreakable: true 
+    };
+
+    if (datos.firmaGrafica) {
+        bloqueFirma.stack.push({ image: datos.firmaGrafica, fit: [120, 60], alignment: 'center', margin: [0, 0, 0, 5] });
+    } else {
+        bloqueFirma.stack.push({ text: '_______________________', alignment: 'center', margin: [0, 30, 0, 5], color: '#64748B' });
+    }
+
+    const nombreFirma = datos.elaboradoPor ? datos.elaboradoPor.toUpperCase() : 'USUARIO NO IDENTIFICADO';
+    const cargoFirma = datos.cargoElaborador ? datos.cargoElaborador.toUpperCase() : 'PERSONAL';
+
+    bloqueFirma.stack.push(
+        { text: nombreFirma, alignment: 'center', fontSize: 9, bold: true, color: '#1E293B' },
+        { text: cargoFirma, alignment: 'center', fontSize: 8, color: '#64748B' }
+    );
+
+    docContent.push(bloqueFirma);
 
     // 4. Bloque de Fotos (Estricto 6 por página)
     const FOTOS_POR_PAGINA = 6;
@@ -173,10 +227,10 @@ export function generarDocDefinition(datos) {
         });
     }
 
-    // 5. Definición final con membrete global
+    // 5. Definición final con membrete global ajustado (¡AQUÍ ESTÁ LA MAGIA!)
     return {
         pageSize: 'A4',
-        pageMargins: [25, 95, 25, 20],
+        pageMargins: [25, 115, 25, 20], // <-- Se aumentó de 95 a 115 para que quepa la cuarta línea
         header: function(currentPage, pageCount) {
             return {
                 margin: [25, 12, 25, 0],
