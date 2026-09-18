@@ -1,13 +1,14 @@
 // ==========================================
-// registro_fotografico.js (Con app_core y sidebar.js)
+// registro_fotografico.js (Conectado al Backend Drive)
 // ==========================================
 
 import { auth, db, initAppCore } from "./app_core.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
-import { doc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 const storage = getStorage();
 
+// Ahora guardaremos objetos { fileOriginal, thumbBase64 }
 let fotosLote = []; 
 let ubicacionGPS = "-0.00000, -0.00000";
 
@@ -52,20 +53,20 @@ function obtenerUbicacion() {
 }
 
 // =====================================
-// LÓGICA DE FOTOS Y MARCA DE AGUA
+// LÓGICA DE FOTOS Y MARCA DE AGUA (THUMBNAIL)
 // =====================================
 
 window.procesarFotoMultiple = async function(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    document.getElementById('statusText').innerHTML = `<span class="text-corpBlue-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> Procesando marca(s) de agua...</span>`;
+    document.getElementById('statusText').innerHTML = `<span class="text-corpBlue-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> Procesando miniatura(s)...</span>`;
     
     for (let i = 0; i < files.length; i++) {
         await procesarUnaFoto(files[i]);
     }
     
-    document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Fotos procesadas</span>`;
+    document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Fotos listas para subir</span>`;
     
     document.getElementById('cameraInput').value = "";
     document.getElementById('galleryInput').value = "";
@@ -93,7 +94,7 @@ function procesarUnaFoto(file) {
                 canvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // --- TEXTO Y LOGO ---
+                // --- TEXTO Y LOGO (Solo para la miniatura visual) ---
                 const fontSize = Math.max(12, Math.floor(height * 0.02)); 
                 const interlineado = fontSize * 1.5; 
                 const logoX = width * 0.03;
@@ -115,15 +116,12 @@ function procesarUnaFoto(file) {
                     
                     let textY = currentY + logoHeightPx + (interlineado * 0.8); 
 
-                    // 1. Empresa Contratista
                     ctx.fillText(window.APP_STATE.empresa.nombre || "Empresa Sin Nombre", logoX, textY);
                     textY += interlineado;
                     
-                    // 2. Nombre del Proyecto
                     ctx.fillText((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), logoX, textY);
                     textY += interlineado;
                     
-                    // 3. Fecha y Hora
                     const fechaSeleccionada = document.getElementById('fechaRegistro').value;
                     const partes = fechaSeleccionada.split('-'); 
                     const fechaFormat = `${partes[2]}.${partes[1]}.${partes[0]}`;
@@ -132,18 +130,22 @@ function procesarUnaFoto(file) {
                     ctx.fillText(`${fechaFormat} ${horas}:${minutos}`, logoX, textY);
                     textY += interlineado;
                     
-                    // 4. Ubicación GPS
                     ctx.fillText(ubicacionGPS, logoX, textY);
                     ctx.shadowColor = "transparent";
 
-                    // Generar y guardar
-                    const base64Generado = canvas.toDataURL("image/jpeg", 0.85);
-                    fotosLote.push(base64Generado);
+                    // Generamos el base64 comprimido (60% calidad) para la miniatura
+                    const base64Generado = canvas.toDataURL("image/jpeg", 0.60);
+                    
+                    // Guardamos AMBOS: El archivo original intacto y la miniatura
+                    fotosLote.push({
+                        fileOriginal: file,
+                        thumbBase64: base64Generado
+                    });
+                    
                     actualizarGaleria();
                     resolve();
                 };
 
-                // Cargar Logo oficial desde caché
                 const logoUrl = window.APP_STATE.empresa.logo;
                 if (logoUrl) {
                     const watermarkObj = new Image();
@@ -154,9 +156,7 @@ function procesarUnaFoto(file) {
                         const targetLogoWidth = targetLogoHeight * aspect;
                         sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
                     };
-                    watermarkObj.onerror = function() {
-                        sellarFoto(0, 0, null);
-                    };
+                    watermarkObj.onerror = function() { sellarFoto(0, 0, null); };
                     watermarkObj.src = logoUrl;
                 } else {
                     sellarFoto(0, 0, null);
@@ -179,10 +179,10 @@ function actualizarGaleria() {
         document.getElementById('textoBtnGuardar').innerText = `Subir ${fotosLote.length} foto(s)`;
         
         galeriaScroll.innerHTML = "";
-        fotosLote.forEach((foto, index) => {
+        fotosLote.forEach((fotoItem, index) => {
             galeriaScroll.innerHTML += `
                 <div class="relative w-full aspect-[3/4]">
-                    <img src="${foto}" class="w-full h-full object-cover rounded-lg border border-slate-300 shadow-sm bg-white">
+                    <img src="${fotoItem.thumbBase64}" class="w-full h-full object-cover rounded-lg border border-slate-300 shadow-sm bg-white">
                     <button onclick="window.eliminarFoto(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[12px] font-bold shadow-md hover:bg-red-600 transition">X</button>
                 </div>
             `;
@@ -203,94 +203,112 @@ function dataURItoBlob(dataURI) {
     const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
     const ab = new ArrayBuffer(byteString.length);
     const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-    }
+    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i); }
     return new Blob([ab], {type: mimeString});
 }
 
 // =====================================
-// ENVÍO A FIREBASE STORAGE Y FIRESTORE
+// ENVÍO A FIREBASE STORAGE (Bandeja Temporal)
 // =====================================
 window.guardarYEnviarLote = async function() {
     if (fotosLote.length === 0) return;
     
     const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
+    const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
+    
+    if (!ID_FOLDER_DRIVE) {
+        alert("⚠️ Error: El proyecto no tiene configurado un 'idfolder_regfoto_proyect' en la base de datos.");
+        return;
+    }
+
     const btn = document.getElementById('btnGuardarMasivo');
     const toggleLocal = document.getElementById('toggleLocal').checked;
     const fechaSeleccionada = document.getElementById('fechaRegistro').value;
+    const docId = fechaSeleccionada + "_" + PROJECT_ID;
     
     btn.innerHTML = `Subiendo a la nube... <span class="material-symbols-outlined animate-spin text-lg">refresh</span>`;
     btn.disabled = true;
 
+    // 1. Crear el "cascarón" del documento en Firestore si no existe
+    try {
+        const galeriaRef = doc(db, "registro_fotos", docId);
+        const usuarioSube = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
+
+        await setDoc(galeriaRef, {
+            id_proyect: PROJECT_ID,
+            fecha_proyect: fechaSeleccionada,
+            creadopor_proyect: usuarioSube,
+            ultima_subida: new Date().toISOString()
+        }, { merge: true });
+    } catch (dbError) {
+        console.error("Error creando documento base:", dbError);
+        alert("Error al conectar con la base de datos.");
+        restaurarBotonSubida(btn);
+        return;
+    }
+
     let errores = 0;
-    let fotosParaFirestore = []; // Nuevo: Arreglo para guardar en base de datos
 
+    // 2. Iterar sobre las fotos y subir a la bandeja temporal de Storage
     for (let i = 0; i < fotosLote.length; i++) {
-        const fotoBase64 = fotosLote[i];
+        const fotoItem = fotosLote[i];
+        
+        // HUELLA DIGITAL: FOTO + Timestamp exacto + Índice
+        const uniqueId = `FOTO_${Date.now()}_${i}`;
 
-        // 1. Descarga Local Opcional
+        // Descarga Local Opcional (Usa la miniatura con la info estampada)
         if (toggleLocal) {
             try {
                 const a = document.createElement("a");
-                a.href = fotoBase64;
-                a.download = `IMG_${PROJECT_ID}_${Date.now()}_${i+1}.jpg`; 
+                a.href = fotoItem.thumbBase64;
+                a.download = `${uniqueId}.jpg`; 
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-            } catch(e) { console.log("Error descarga local: " + i); }
+            } catch(e) { console.log("Error descarga local: ", e); }
         }
 
-        // 2. Subida a Firebase Storage
         try {
-            const blob = dataURItoBlob(fotoBase64);
-            const storagePath = `registro_fotos/${PROJECT_ID}/${fechaSeleccionada}/FOTO_${Date.now()}_${i+1}.jpg`;
-            const storageRef = ref(storage, storagePath);
-            await uploadBytes(storageRef, blob);
+            // SE ELIMINÓ LA SUBIDA DE LA MINIATURA. 
+            // Solo subimos la Original Pesada a temp_fotos/ (Para que el Backend trabaje)
+            const tempPath = `temp_fotos/${uniqueId}.jpg`;
+            const tempRef = ref(storage, tempPath);
             
-            // 3. Obtener la URL pública oficial
-            const urlDescarga = await getDownloadURL(storageRef);
-            
-            fotosParaFirestore.push({
-                id_foto: "FOTO_" + Date.now().toString(36) + "_" + i,
-                url: urlDescarga,
-                hora_subida: new Date().toISOString()
-            });
+            // Inyección de Metadatos cruciales para procesarFotoDrive.js
+            const metadatosBackend = {
+                customMetadata: {
+                    idFolderDrive: ID_FOLDER_DRIVE,
+                    empresa: window.APP_STATE.empresa.nombre || "Empresa Sin Nombre",
+                    logoUrl: window.APP_STATE.empresa.logo || "", // <--- NUEVO CAMPO AÑADIDO
+                    proyecto: window.APP_STATE.proyectoActivo.nombre || "Proyecto Sin Nombre",
+                    fecha: fechaSeleccionada,
+                    gps: ubicacionGPS,
+                    docId: docId
+                }
+            };
+
+            await uploadBytes(tempRef, fotoItem.fileOriginal, metadatosBackend);
 
         } catch (error) {
-            console.error("Error subiendo foto", error);
-            errores++;
-        }
-    }
-
-    // 4. Guardar unificado en FIRESTORE (La lógica que pediste)
-    if (fotosParaFirestore.length > 0) {
-        try {
-            const docId = fechaSeleccionada + "_" + PROJECT_ID;
-            const galeriaRef = doc(db, "registro_fotos", docId);
-            const usuarioSube = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
-
-            await setDoc(galeriaRef, {
-                id_proyect: PROJECT_ID,
-                fecha_proyect: fechaSeleccionada,
-                creadopor_proyect: usuarioSube,
-                fotos: arrayUnion(...fotosParaFirestore) // Agrega las nuevas sin borrar las viejas
-            }, { merge: true });
-        } catch (dbError) {
-            console.error("Error guardando en Firestore:", dbError);
+            console.error("Error subiendo archivos de la foto:", error);
             errores++;
         }
     }
 
     if (errores === 0) {
-        alert(`✅ Lote de ${fotosLote.length} foto(s) guardado exitosamente en la base de datos.`);
+        alert(`✅ Subida exitosa. Tu backend ya está estampando las fotos y enviándolas a Google Drive.`);
     } else {
-        alert(`⚠️ Proceso terminado, pero ocurrieron ${errores} errores.`);
+        alert(`⚠️ Proceso terminado, pero ocurrieron ${errores} errores al enviar.`);
     }
 
+    // 3. Limpiar pantalla
     fotosLote = [];
     actualizarGaleria();
+    restaurarBotonSubida(btn);
+};
+
+function restaurarBotonSubida(btn) {
     btn.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Subir Fotos a Firebase`;
     btn.disabled = false;
     document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Listo para nuevo lote</span>`;
-};
+}

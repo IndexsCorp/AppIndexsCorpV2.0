@@ -37,7 +37,7 @@
     <!-- PANTALLA DE CARGA GLOBAL -->
     <div id="pantalla-carga" class="fixed inset-0 bg-slate-100 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
         <span class="material-symbols-outlined text-4xl text-corpBlue-500 animate-spin mb-4">refresh</span>
-        <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Cargando Cámara y Proyecto...</p>
+        <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Cargando App y Proyecto...</p>
     </div>
 
     <!-- BARRA SUPERIOR -->
@@ -63,7 +63,7 @@
                     <p id="dropdown-user-name" class="text-sm font-bold text-slate-800">Cargando...</p>
                     <p id="dropdown-user-rol" class="text-xs text-slate-500 truncate">Rol</p>
                 </div>
-                <button id="btn-logout" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
+                <button onclick="window.cerrarSesionGlobal()" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
                     <span class="material-symbols-outlined text-[20px]">logout</span> Cerrar Sesión
                 </button>
             </div>
