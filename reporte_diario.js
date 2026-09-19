@@ -34,15 +34,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
         ['dateField', 'prevDateField', 'envioDateField', 'editDateField'].forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.value = today;
+            if(el) {
+                el.value = today;
+                el.max = today; // <-- NUEVO: Bloquea el calendario para no elegir fechas del futuro
+            }
         });
 
-        // NUEVO: Autollenar firma y bloquear campo
+        // NUEVO: Autollenar firma (pero permitiendo edición manual si es necesario)
         const inputFirma = document.getElementById("pdfFirma");
         if (inputFirma) {
-            inputFirma.value = estadoGlobal.user.nombre;
-            inputFirma.readOnly = true; // Bloquea la edición
-            inputFirma.classList.add("bg-slate-100", "text-slate-600", "cursor-not-allowed"); // Estilo de bloqueado
+            // Revisa si escribió una firma manual antes, si no, usa su nombre de perfil
+            const firmaGuardada = localStorage.getItem("firmaResidente");
+            inputFirma.value = firmaGuardada || estadoGlobal.user.nombre;
+            
+            // Eliminamos el readOnly y los estilos de bloqueo para que pueda corregirlo si quiere
+            inputFirma.classList.add("bg-white", "text-slate-800"); 
         }
 
         // Carga de constructores de UI (Las listas ahora se leen de APP_STATE.proyectoActivo)
@@ -201,7 +207,11 @@ window.abrirModalFotosDia = async function(btn) {
         
         loading.classList.add('hidden');
 
-        if (!galeriaSnap.exists() || !galeriaSnap.data().fotos || galeriaSnap.data().fotos.length === 0) {
+        // Leemos la data de forma segura. Recuerda que desde el registro_fotografico las mandamos a 'registro_fotos'
+        const galeriaData = galeriaSnap.exists() ? galeriaSnap.data() : null;
+
+        // Validamos usando galeriaData de forma segura
+        if (!galeriaData || !galeriaData.fotos || galeriaData.fotos.length === 0) {
             grid.innerHTML = `
                 <div class="col-span-full text-center py-8">
                     <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">image_not_supported</span>
@@ -211,13 +221,17 @@ window.abrirModalFotosDia = async function(btn) {
             return;
         }
 
-        // Si hay documento, extraemos el arreglo de fotos
-        const fotosRegistradas = galeriaSnap.data().fotos;
+        // Si hay documento, extraemos el arreglo de fotos desde la variable segura
+        const fotosRegistradas = galeriaData.fotos;
 
         fotosRegistradas.forEach(fotoObj => {
+            // Extraemos ambas URLs: La de Drive para ver, la de Firebase para el PDF
+            const urlVisor = `https://drive.google.com/thumbnail?id=${fotoObj.id_drive}&sz=w800`;
+            const urlPdf = fotoObj.url_pdf || ''; // Link nativo de Storage
+
             grid.innerHTML += `
-                <div class="relative aspect-video rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:ring-4 ring-corpBlue-500 transition group" onclick="window.seleccionarFotoGaleria('${fotoObj.url}')">
-                    <img src="${fotoObj.url}" class="w-full h-full object-cover">
+                <div class="relative aspect-video rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:ring-4 ring-corpBlue-500 transition group" onclick="window.seleccionarFotoGaleria('${urlVisor}', '${urlPdf}')">
+                    <img src="${urlVisor}" class="w-full h-full object-cover">
                     <div class="absolute inset-0 bg-corpBlue-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
                         <span class="material-symbols-outlined text-white text-3xl">check_circle</span>
                     </div>
@@ -232,15 +246,22 @@ window.abrirModalFotosDia = async function(btn) {
     }
 };
 
-window.seleccionarFotoGaleria = function(url) {
+window.seleccionarFotoGaleria = function(urlVisor, urlPdf) {
     if(!btnDestinoGaleria) return;
     
     const card = btnDestinoGaleria.closest('.act-card');
     const container = card.querySelector('.foto-preview-container');
     
-    // Asignamos la URL de la nube directamente (omitimos Base64 para ahorrar espacio)
-    container.querySelector('.act-preview-img').src = url;
-    container.querySelector('.act-foto-url').value = url;
+    // 1. Mostramos la miniatura ultrarrápida de Drive en pantalla
+    container.querySelector('.act-preview-img').src = urlVisor;
+    
+    // 2. Guardamos la URL de Firebase en el input original (para que el PDF la lea)
+    // (Si es una foto muy vieja que no tiene urlPdf, usamos el visor como respaldo)
+    container.querySelector('.act-foto-url').value = urlPdf || urlVisor; 
+    
+    // 3. Guardamos la URL del visor en un atributo personalizado para que la base de datos lo sepa
+    container.dataset.urlVisor = urlVisor;
+
     container.querySelector('.act-foto-base64').value = ""; 
     
     container.classList.remove('hidden');
@@ -531,8 +552,16 @@ window.submitActividad = async function(btn) {
     const card = btn.closest('.act-card');
     const txt = card.querySelector('.act-texto').value;
     
-    const fotoBase64 = card.querySelector('.act-foto-base64').value;
-    let fotoUrlExistente = card.querySelector('.act-foto-url').value;
+    // Capturar el archivo físico (si tomó/subió una foto nueva)
+    let fileOriginal = null;
+    const cameraInput = card.querySelector('.act-camera');
+    const uploadInput = card.querySelector('.act-upload');
+    if (cameraInput.files && cameraInput.files.length > 0) fileOriginal = cameraInput.files[0];
+    else if (uploadInput.files && uploadInput.files.length > 0) fileOriginal = uploadInput.files[0];
+
+    // Por si eligió una foto de la galería de la nube
+    const fotoGaleriaUrl = card.querySelector('.act-foto-url').value;
+    const visorGaleriaUrl = card.querySelector('.foto-preview-container').dataset.urlVisor || ""; // <- Nuevo!
 
     if(!txt.trim() || !fechaInput) return alert("Verifique la fecha y la descripción de la actividad.");
 
@@ -541,44 +570,54 @@ window.submitActividad = async function(btn) {
     btn.innerHTML = "Guardando...";
 
     try {
-        let finalFotoUrl = fotoUrlExistente;
-
-        if (fotoBase64 && !fotoUrlExistente) {
-            btn.innerHTML = "Subiendo imagen...";
-            const blob = dataURItoBlob(fotoBase64);
-            const storagePath = `registro_fotos/${PROJECT_ID}/${fechaInput}_${Date.now()}.jpg`;
-            const storageRef = ref(storage, storagePath);
-            await uploadBytes(storageRef, blob);
-            finalFotoUrl = await getDownloadURL(storageRef);
-        }
-
-        btn.innerHTML = "Guardando en Firestore...";
         const docId = fechaInput + "_" + PROJECT_ID;
         const reporteRef = doc(db, "reportes_diarios", docId);
-        
-        // Obtenemos al usuario que está guardando directamente de la caché
         const usuarioFirma = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
+        
+        const idActividadGenerado = "ACT_" + Date.now().toString(36);
 
-        const nuevaActividad = {
-            id_act: "ACT_" + Date.now().toString(36),
-            texto_act: txt.trim(),
-            urlfoto_act: finalFotoUrl || ""
-        };
-
+        // 1. Guardar el texto y enlaces en Firestore PRIMERO
         await setDoc(reporteRef, {
             id_proyect: PROJECT_ID,
             fecha_proyect: fechaInput,
             creadopor_proyect: usuarioFirma,
-            actividades: arrayUnion(nuevaActividad)
+            actividades: arrayUnion({
+                id_act: idActividadGenerado,
+                texto_act: txt.trim(),
+                urlfoto_act: fotoGaleriaUrl || "", 
+                url_visor_drive: visorGaleriaUrl || "" // Guardamos el visor inmediatamente
+            })
         }, { merge: true });
+
+        // 2. Si tomó una foto NUEVA física, mandarla al backend
+        if (fileOriginal && !fotoGaleriaUrl) {
+            btn.innerHTML = `Enviando a Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+            
+            const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
+            const tempPath = `temp_fotos/ACT_${Date.now()}.jpg`;
+            const tempRef = ref(storage, tempPath);
+            
+            const metadatosBackend = {
+                customMetadata: {
+                    idFolderDrive: ID_FOLDER_DRIVE,
+                    empresa: window.APP_STATE.empresa.nombre || "Empresa",
+                    logoUrl: window.APP_STATE.empresa.logo || "",
+                    proyecto: window.APP_STATE.proyectoActivo.nombre,
+                    fecha: fechaInput,
+                    gps: ubicacionGPS,
+                    docId: docId,
+                    tipoOrigen: "reporte_diario",           
+                    idActividad: idActividadGenerado        
+                }
+            };
+            await uploadBytes(tempRef, fileOriginal, metadatosBackend);
+        }
 
         btn.innerHTML = "✅ Actividad Guardada";
         setTimeout(() => {
             card.remove();
-            if (document.querySelectorAll('.act-card').length === 0) {
-                window.addActividadRow();
-            }
-        }, 1000);
+            if (document.querySelectorAll('.act-card').length === 0) window.addActividadRow();
+        }, 1500);
 
     } catch (error) {
         console.error("Error al guardar actividad:", error);
@@ -815,18 +854,28 @@ window.renderizarEdicion = function() {
                 <textarea id="edit_act_${index}" class="act-texto w-full p-2.5 border border-slate-300 rounded-lg mb-3 text-sm outline-none focus:border-corpBlue-500">${act.texto_act}</textarea>
                 
                 <div class="flex gap-3 mb-4">
-                    <div class="flex-1 flex flex-col sm:flex-row gap-2 justify-center">
+                    <div class="flex-1 flex flex-col sm:flex-row gap-2 justify-center relative">
                         <button type="button" class="flex-1 bg-corpBlue-600 hover:bg-corpBlue-700 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-camera').click()">
                             <span class="material-symbols-outlined text-[18px]">photo_camera</span> Tomar
                         </button>
                         <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-upload').click()">
                             <span class="material-symbols-outlined text-[18px]">upload_file</span> Subir
                         </button>
+                        <!-- NUEVO BOTÓN DE GALERÍA -->
+                        <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="window.abrirModalFotosDia(this)">
+                            <span class="material-symbols-outlined text-[18px]">photo_library</span> Galería
+                        </button>
+                        
+                        <!-- Inputs ocultos vitales para que funcionen los botones de Tomar y Subir -->
+                        <input type="file" class="act-camera hidden" accept="image/*" capture="environment" onchange="window.previsualizarFoto(this)">
+                        <input type="file" class="act-upload hidden" accept="image/*" onchange="window.previsualizarFoto(this)">
                     </div>
 
                     <div class="foto-preview-container ${act.urlfoto_act ? '' : 'hidden'} w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm">
-                        <img class="act-preview-img w-full h-full object-cover rounded-lg" src="${act.urlfoto_act || ''}">
+                        <!-- LA IMAGEN VISIBLE USA DRIVE -->
+                        <img class="act-preview-img w-full h-full object-cover rounded-lg" src="${act.url_visor_drive || act.urlfoto_act || ''}">
                         <button type="button" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition" onclick="window.removerFoto(this)">✕</button>
+                        <!-- EL INPUT OCULTO GUARDA FIREBASE PARA EL PDF -->
                         <input type="hidden" class="act-foto-url" value="${act.urlfoto_act || ''}"> 
                         <input type="hidden" class="act-foto-base64">
                     </div>
@@ -921,9 +970,16 @@ window.actualizarActividadEdicion = async function(btn, index) {
     const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const card = btn.closest('.act-card');
     const nuevoTexto = card.querySelector('.act-texto').value;
-    const fotoBase64 = card.querySelector('.act-foto-base64').value;
     const fotoUrlExistente = card.querySelector('.act-foto-url').value;
+    const container = card.querySelector('.foto-preview-container'); // Seleccionamos el contenedor
     const fechaInput = document.getElementById('editDateField').value;
+
+    // 1. CAPTURAR EL ARCHIVO FÍSICO NUEVO (Si es que usó Tomar o Subir)
+    let fileOriginal = null;
+    const cameraInput = card.querySelector('.act-camera');
+    const uploadInput = card.querySelector('.act-upload');
+    if (cameraInput.files && cameraInput.files.length > 0) fileOriginal = cameraInput.files[0];
+    else if (uploadInput.files && uploadInput.files.length > 0) fileOriginal = uploadInput.files[0];
 
     if(!nuevoTexto.trim()) return alert("El texto no puede estar vacío.");
 
@@ -932,23 +988,52 @@ window.actualizarActividadEdicion = async function(btn, index) {
     btn.innerHTML = "Actualizando...";
 
     try {
-        let finalFotoUrl = fotoUrlExistente;
+        const docId = fechaInput + "_" + PROJECT_ID;
+        const idActividadActual = window.CURRENT_EDIT_DOC.actividades[index].id_act;
 
-        if (fotoBase64 && !fotoUrlExistente) {
-            btn.innerHTML = "Subiendo nueva imagen...";
-            const blob = dataURItoBlob(fotoBase64); 
-            const storagePath = `reportes_fotos/${PROJECT_ID}/${fechaInput}_${Date.now()}.jpg`;
-            const storageRef = ref(storage, storagePath);
-            await uploadBytes(storageRef, blob);
-            finalFotoUrl = await getDownloadURL(storageRef);
+        // 2. ACTUALIZAMOS EL TEXTO EN LA BASE DE DATOS INMEDIATAMENTE
+        window.CURRENT_EDIT_DOC.actividades[index].texto_act = nuevoTexto.trim();
+        
+        // Si no subió una foto física, procesamos los links de Galería o borrado
+        if (!fileOriginal) {
+            window.CURRENT_EDIT_DOC.actividades[index].urlfoto_act = fotoUrlExistente || "";
+            
+            if (!fotoUrlExistente) {
+                // Si eliminó la foto con la X roja, borramos el visor
+                window.CURRENT_EDIT_DOC.actividades[index].url_visor_drive = ""; 
+            } else if (container.dataset.urlVisor) {
+                // ¡AQUÍ ESTÁ LA MAGIA! Si eligió de la Galería, capturamos su enlace visor
+                window.CURRENT_EDIT_DOC.actividades[index].url_visor_drive = container.dataset.urlVisor;
+            }
         }
 
-        window.CURRENT_EDIT_DOC.actividades[index].texto_act = nuevoTexto.trim();
-        window.CURRENT_EDIT_DOC.actividades[index].urlfoto_act = finalFotoUrl || "";
-        
         btn.innerHTML = "Actualizando Base de Datos...";
         await updateDoc(window.CURRENT_EDIT_REF, { actividades: window.CURRENT_EDIT_DOC.actividades });
-        
+
+        // 3. SI SUBIÓ UNA FOTO NUEVA, LA ENVIAMOS AL BACKEND
+        if (fileOriginal) {
+            btn.innerHTML = `Enviando a Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+            
+            const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
+            const tempPath = `temp_fotos/EDIT_${Date.now()}.jpg`;
+            const tempRef = ref(storage, tempPath);
+            
+            const metadatosBackend = {
+                customMetadata: {
+                    idFolderDrive: ID_FOLDER_DRIVE,
+                    empresa: window.APP_STATE.empresa.nombre || "Empresa",
+                    logoUrl: window.APP_STATE.empresa.logo || "",
+                    proyecto: window.APP_STATE.proyectoActivo.nombre,
+                    fecha: fechaInput,
+                    gps: ubicacionGPS,
+                    docId: docId,
+                    tipoOrigen: "reporte_diario",           
+                    idActividad: idActividadActual       
+                }
+            };
+            await uploadBytes(tempRef, fileOriginal, metadatosBackend);
+        }
+
         btn.innerHTML = "✅ Actualizado";
         setTimeout(() => {
             btn.disabled = false;
@@ -1031,36 +1116,35 @@ window.eliminarElementoEdicion = async function(campoArreglo, index) {
 };
 
 // ==========================================
-// SECCIÓN: PREVISUALIZAR Y GENERAR PDF (PESTAÑA 3) CON PDFMAKE
+// FUNCIÓN PARA EXTRAER FOTOS DE FIREBASE A PDFMAKE
 // ==========================================
-
 async function urlToBase64(url) {
     if (!url) return '';
     if (url.startsWith('data:image')) return url;
 
     try {
+        // Hacemos una petición directa y segura al enlace (Firebase o Drive)
         const response = await fetch(url);
+        
         if (response.ok) {
             const blob = await response.blob();
-            return await new Promise((resolve) => {
+            return new Promise((resolve) => {
                 const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
+                reader.onloadend = () => resolve(reader.result); // Retorna la cadena Base64 pura
                 reader.onerror = () => resolve('');
                 reader.readAsDataURL(blob);
             });
         }
     } catch (e) {
-        console.warn("Fetch directo falló, intentando Canvas...", e);
+        console.warn("Error al descargar imagen para el PDF:", e);
     }
 
+    // Método de respaldo clásico (Canvas)
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
         
-        const timeoutId = setTimeout(() => {
-            console.warn("Timeout al cargar imagen");
-            resolve('');
-        }, 5000);
+        const timeoutId = setTimeout(() => resolve(''), 5000);
 
         img.onload = () => {
             clearTimeout(timeoutId);
@@ -1070,7 +1154,7 @@ async function urlToBase64(url) {
                 canvas.height = img.naturalHeight || img.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                resolve(canvas.toDataURL('image/jpeg', 0.8)); 
             } catch (err) {
                 resolve('');
             }
