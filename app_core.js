@@ -188,8 +188,11 @@ export function initAppCore(requiereProyecto = true) {
                             idSupervisionOficial: idSupervision,
                             correosPara: proyData.correos_Para || "",
                             correosCC: proyData.correos_cc || "",
-                            appsHabilitadas: proyData.apps || [], // <--- CORREGIDO AL NOMBRE REAL EN BD
-                            idfolder_regfoto_proyect: proyData.idfolder_regfoto_proyect || ""  
+                            appsHabilitadas: proyData.apps || [], 
+                            idfolder_regfoto_proyect: proyData.idfolder_regfoto_proyect || "",
+                            idfolder_repdia_proyect: proyData.idfolder_repdia_proyect || "",
+                            // --- NUEVA VARIABLE PARA OBS. DE CALIDAD ---
+                            idfolder_obscal_proyect: proyData.idfolder_obscal_proyect || "" 
                         };
                     }
                 }

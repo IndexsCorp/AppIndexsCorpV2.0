@@ -279,11 +279,13 @@ window.guardarYEnviarLote = async function() {
                 customMetadata: {
                     idFolderDrive: ID_FOLDER_DRIVE,
                     empresa: window.APP_STATE.empresa.nombre || "Empresa Sin Nombre",
-                    logoUrl: window.APP_STATE.empresa.logo || "", // <--- NUEVO CAMPO AÑADIDO
+                    logoUrl: window.APP_STATE.empresa.logo || "", 
                     proyecto: window.APP_STATE.proyectoActivo.nombre || "Proyecto Sin Nombre",
                     fecha: fechaSeleccionada,
                     gps: ubicacionGPS,
-                    docId: docId
+                    docId: docId,
+                    // --- NUEVAS ETIQUETAS DE ENRUTAMIENTO ---
+                    tipoOrigen: 'registro_fotografico'
                 }
             };
 

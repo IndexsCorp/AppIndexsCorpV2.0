@@ -1316,52 +1316,6 @@ window.accionGenerarPrevisualizacion = async function() {
     }
 };
 
-window.accionGuardarPDFDefinitivo = async function() {
-    const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
-    const fecha = document.getElementById('prevDateField').value;
-    const btn = document.getElementById('btnGuardarOficial');
-
-    if (!pdfBlobGenerado) return alert("Primero debe generar la vista previa del PDF.");
-
-    const origText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">cloud_upload</span> Subiendo a Firebase...`;
-
-    try {
-        const storagePath = `reportes_pdfs/${PROJECT_ID}/${fecha}_RD_${window.APP_STATE.proyectoActivo.nombre}.pdf`;
-        const storageRef = ref(storage, storagePath);
-        
-        await uploadBytes(storageRef, pdfBlobGenerado);
-        const urlPDFDescarga = await getDownloadURL(storageRef);
-
-        const docId = fecha + "_" + PROJECT_ID;
-        const reporteRef = doc(db, "reportes_diarios", docId);
-        const partesFecha = fecha.split('-');
-        const correlativoNum = `${partesFecha[0].substring(2)}${partesFecha[1]}${partesFecha[2]}`;
-
-        await setDoc(reporteRef, {
-            url_pdf_oficial: urlPDFDescarga,
-            num_registro_oficial: correlativoNum,
-            fecha_guardado_pdf: new Date().toISOString()
-        }, { merge: true });
-
-        document.getElementById('envioDateField').value = fecha;
-        window.cargarDatosMensajeria();
-
-        btn.innerHTML = "✅ PDF Guardado Oficialmente";
-        alert(`✅ PDF vectorial compilado y registrado en Firebase Storage exitosamente.`);
-
-    } catch (error) {
-        console.error("Error al guardar PDF:", error);
-        alert("Error al guardar en Storage: " + error.message);
-    } finally {
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.innerHTML = origText;
-        }, 2000);
-    }
-};
-
 // ==========================================
 // SECCIÓN: PESTAÑA ENVIAR CORREO (PESTAÑA 4)
 // ==========================================
@@ -1449,5 +1403,82 @@ window.accionEnviarCorreoDefinitivo = async function(proveedor) {
         
     } else {
         window.location.href = mailtoEstandar;
+    }
+};
+
+window.accionGuardarPDFDefinitivo = async function() {
+    const btn = document.getElementById('btnGuardarOficial');
+    if (!pdfBlobGenerado) return alert("Primero debe generar la vista previa del documento.");
+
+    const origText = btn.innerHTML;
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin align-middle">refresh</span> Guardando Oficialmente...`;
+    btn.disabled = true;
+
+    try {
+        const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
+        const fecha = document.getElementById('prevDateField').value; // Ej: "2026-09-19"
+        const docId = fecha + "_" + PROJECT_ID;
+        
+        const ID_CARPETA_PDFS = window.APP_STATE.proyectoActivo.idfolder_repdia_proyect;
+        if (!ID_CARPETA_PDFS) {
+            console.warn("Advertencia: El proyecto no tiene configurada la variable 'idfolder_repdia_proyect'.");
+        }
+
+        // ==========================================
+        // NOMBRE AMIGABLE PARA EL CLIENTE
+        // ==========================================
+        const nombreProyectoLimpio = window.APP_STATE.proyectoActivo.nombre
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9\s-]/g, "")
+            .trim()
+            .replace(/\s+/g, "_");
+        
+        const nombreFinalPDF = `Reporte_Diario_${fecha}_${nombreProyectoLimpio}.pdf`;
+
+        // 3. Ruta temporal en Firebase Storage
+        const pdfPath = `temp_pdfs/${Date.now()}_${nombreFinalPDF}`;
+        const pdfRef = ref(storage, pdfPath);
+        
+        // Extraemos Año y Mes para la subcarpeta de Drive
+        const partesFecha = fecha.split('-'); // [ "2026", "09", "19" ]
+        const yearPDF = partesFecha[0];
+        const mesPDF = partesFecha[1];
+        
+        // ==========================================
+        // MANIFIESTO DE ENVÍO PARA EL PDF UNIVERSAL
+        // ==========================================
+        const metadatosBackend = {
+            customMetadata: {
+                idFolderDrive: ID_CARPETA_PDFS || '',
+                docId: docId,
+                nombreArchivo: nombreFinalPDF,
+                rutaSubcarpetas: JSON.stringify([yearPDF, `${yearPDF}-${mesPDF}`]), // Carpeta: "2026" -> "2026-09"
+                coleccionDB: 'reportes_diarios',
+                
+                // --- ETIQUETAS UNIVERSALES ---
+                carpetaResguardo: 'reportes_pdf_finales',
+                campoPdfDrive: 'url_pdf_drive',
+                campoPdfStorage: 'url_pdf_oficial', // <- Ajustado para que coincida con tu pestaña de envío
+                nuevoEstado: 'Cerrado'
+            }
+        };
+
+        // 5. Subimos el archivo a Firebase
+        await uploadBytes(pdfRef, pdfBlobGenerado, metadatosBackend);
+        
+        // 6. Preparamos la pestaña de envío de correo
+        document.getElementById('envioDateField').value = fecha;
+        if (typeof window.cargarDatosMensajeria === 'function') {
+            window.cargarDatosMensajeria();
+        }
+
+        alert("¡PDF Guardado con éxito! Se está procesando su copia en Google Drive en segundo plano.");
+        
+    } catch (error) {
+        console.error("Error al guardar el PDF oficial:", error);
+        alert("Ocurrió un error al guardar el documento: " + error.message);
+    } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
     }
 };
