@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Protocolos de Calidad</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              corpBlue: { 50: '#ebf0f5', 100: '#d1dee8', 300: '#7aa3c2', 500: '#336a94', 600: '#233D5C', 700: '#1c314a', 800: '#142538' },
+              corpGreen: { DEFAULT: '#85B648', hover: '#719e3a' }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <style>
+        .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans overflow-x-hidden min-h-screen flex flex-col">
+
+    <!-- PANTALLA DE CARGA GLOBAL -->
+    <div id="pantalla-carga" class="fixed inset-0 bg-slate-100 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+        <span class="material-symbols-outlined text-4xl text-corpBlue-500 animate-spin mb-4">refresh</span>
+        <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Cargando App y Proyecto...</p>
+    </div>
+
+    <!-- BARRA SUPERIOR -->
+    <nav id="navbar-global" class="bg-corpBlue-600 text-white px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-md hidden">
+        <div class="flex items-center gap-4">
+            <button onclick="window.toggleSidebar()" class="hover:bg-corpBlue-500 p-1 rounded transition flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">menu</span>
+            </button>
+            <span class="text-lg font-bold flex items-center gap-2">
+                <span class="material-symbols-outlined">fact_check</span> Protocolos de Calidad
+            </span>
+        </div>
+        
+        <div class="relative flex items-center gap-3">
+            <a href="index.html" class="hidden md:flex items-center gap-2 bg-corpBlue-700 hover:bg-corpBlue-800 px-3 py-1.5 rounded-lg text-sm font-bold transition border border-corpBlue-500">
+                <span class="material-symbols-outlined text-[18px]">arrow_back</span> Portal
+            </a>
+            <button onclick="window.toggleUserMenu()" id="nav-user-initials" class="w-9 h-9 bg-corpBlue-50 text-corpBlue-600 rounded-full font-bold flex items-center justify-center hover:bg-white transition shadow-sm">--</button>
+            <div id="user-menu" class="hidden absolute right-0 top-12 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 overflow-hidden z-50">
+                <div class="px-4 py-3 border-b border-slate-100">
+                    <p id="dropdown-user-name" class="text-sm font-bold text-slate-800">Cargando...</p>
+                    <p id="dropdown-user-rol" class="text-xs text-slate-500 font-medium"></p>
+                </div>
+                <button onclick="window.cerrarSesionGlobal()" class="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-medium">
+                    <span class="material-symbols-outlined text-[20px]">logout</span> Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-40 transition-opacity" onclick="window.toggleSidebar()"></div>
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 flex flex-col"></aside>
+
+    <!-- MODAL EDITOR CANVAS PARA MARCADOR DE PLANOS -->
+    <div id="modal-canvas-editor" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-2 md:p-4 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh]">
+            <div class="bg-corpBlue-800 text-white px-5 py-3 flex justify-between items-center shrink-0">
+                <h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">edit_note</span> Editor de Planos</h3>
+                <button onclick="window.cerrarModalCanvas()" class="hover:bg-corpBlue-700 p-1 rounded-full"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="bg-slate-100 p-3 border-b border-slate-200 flex flex-wrap gap-2 items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="window.setCanvasTool('highlight')" class="px-3 py-1.5 bg-amber-200 text-amber-900 font-bold rounded-lg text-xs flex items-center gap-1"><span class="material-symbols-outlined text-sm">ink_highlighter</span> Resaltar</button>
+                    <button type="button" onclick="window.setCanvasTool('redpen')" class="px-3 py-1.5 bg-red-100 text-red-800 font-bold rounded-lg text-xs flex items-center gap-1"><span class="material-symbols-outlined text-sm">draw</span> Lápiz Rojo</button>
+                    <button type="button" onclick="window.limpiarCanvasEditor()" class="px-3 py-1.5 bg-slate-200 text-slate-700 font-bold rounded-lg text-xs flex items-center gap-1"><span class="material-symbols-outlined text-sm">undo</span> Limpiar</button>
+                </div>
+                <input type="text" id="canvasTituloAnexo" placeholder="Título del Anexo" class="p-1.5 text-xs border border-slate-300 rounded-lg outline-none w-full md:w-64">
+            </div>
+            <div class="flex-1 bg-slate-200 overflow-auto p-2 flex items-center justify-center relative">
+                <canvas id="canvasEditor" class="max-w-full border border-slate-400 bg-white shadow-md cursor-crosshair"></canvas>
+            </div>
+            <div class="bg-white p-4 flex justify-end gap-3 shrink-0">
+                <button onclick="window.cerrarModalCanvas()" class="px-4 py-2 font-bold text-slate-600 bg-slate-100 rounded-lg text-sm">Cancelar</button>
+                <button onclick="window.guardarTrazoAnexo()" class="px-5 py-2 font-bold text-white bg-corpGreen rounded-lg text-sm flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">check</span> Guardar Anexo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main id="main-content" class="flex-grow p-4 max-w-5xl mx-auto w-full mt-2 hidden">
+        
+        <!-- PESTAÑAS (4 TABS ORDENADAS) -->
+        <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <button onclick="window.switchTab('registro')" id="btnTabRegistro" class="tab-btn active bg-corpBlue-600 text-white border-corpBlue-600 border rounded-lg py-2.5 px-5 font-bold text-sm shadow-md transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">checklist</span> 1. Registro
+            </button>
+            <button onclick="window.switchTab('planos')" id="btnTabPlanos" class="tab-btn bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-5 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">map</span> 2. Planos & Anexos
+            </button>
+            <button onclick="window.switchTab('reporte')" id="btnTabReporte" class="tab-btn bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-5 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">picture_as_pdf</span> 3. Reporte
+            </button>
+            <button onclick="window.switchTab('status')" id="btnTabStatus" class="tab-btn bg-white text-slate-500 border border-slate-300 rounded-lg py-2.5 px-5 font-bold text-sm hover:bg-slate-50 transition whitespace-nowrap flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined text-lg">analytics</span> 4. Status
+            </button>
+        </div>
+
+        <!-- 1. PESTAÑA: REGISTRO -->
+        <div id="tabRegistro" class="tab-content active space-y-4">
+            <!-- ACORDEÓN: DATOS GENERALES -->
+            <details class="bg-white rounded-xl shadow-sm border border-slate-200 group" open>
+                <summary class="px-6 py-4 cursor-pointer flex justify-between items-center border-b border-slate-100 bg-slate-50 rounded-t-xl hover:bg-slate-100 transition">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-corpBlue-600">info</span> Datos Generales</h2>
+                    <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div class="p-6">
+                    <!-- Fila 1: Protocolo -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">PROTOCOLO A CARGAR:</label>
+                        <select id="tipoProtocolo" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg bg-white font-bold text-corpBlue-700 outline-none focus:border-corpBlue-500" onchange="window.cargarPlantillaChecklist(this.value)">
+                            <option value="" disabled selected>Seleccione el protocolo a cargar...</option>
+                        </select>
+                    </div>
+
+                    <!-- Fila 2: Fecha y Correlativo -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Fecha:</label>
+                            <input type="date" id="protFecha" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">N° Correlativo:</label>
+                            <input type="text" id="protCorrelativo" placeholder="Ej: 104" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg bg-slate-50 font-bold text-red-600 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Fila 3: Frente y Sector Separados con Controles -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-semibold text-slate-600">Frente:</label>
+                                <div class="flex gap-2">
+                                    <button type="button" onclick="window.agregarItemLista('frentes', 'protFrente')" class="text-corpGreen hover:text-corpGreen-hover" title="Añadir nuevo frente"><span class="material-symbols-outlined text-[16px]">add_circle</span></button>
+                                    <button type="button" onclick="window.eliminarItemLista('frentes', 'protFrente')" class="text-red-500 hover:text-red-700" title="Eliminar frente seleccionado"><span class="material-symbols-outlined text-[16px]">do_not_disturb_on</span></button>
+                                    <button type="button" onclick="window.recargarListaEspecifica('frentes', 'protFrente')" class="text-slate-400 hover:text-corpBlue-600 transition" title="Sincronizar con base de datos"><span class="material-symbols-outlined text-[16px]">sync</span></button>
+                                </div>
+                            </div>
+                            <select id="protFrente" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500">
+                                <option value="" disabled selected>Seleccione frente...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-semibold text-slate-600">Sector:</label>
+                                <div class="flex gap-2">
+                                    <button type="button" onclick="window.agregarItemLista('sectores', 'protSector')" class="text-corpGreen hover:text-corpGreen-hover" title="Añadir nuevo sector"><span class="material-symbols-outlined text-[16px]">add_circle</span></button>
+                                    <button type="button" onclick="window.eliminarItemLista('sectores', 'protSector')" class="text-red-500 hover:text-red-700" title="Eliminar sector seleccionado"><span class="material-symbols-outlined text-[16px]">do_not_disturb_on</span></button>
+                                    <button type="button" onclick="window.recargarListaEspecifica('sectores', 'protSector')" class="text-slate-400 hover:text-corpBlue-600 transition" title="Sincronizar con base de datos"><span class="material-symbols-outlined text-[16px]">sync</span></button>
+                                </div>
+                            </div>
+                            <select id="protSector" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500">
+                                <option value="" disabled selected>Seleccione sector...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Fila 4: Ubicación y Plano -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Ubicación (Ejes):</label>
+                            <input type="text" id="protUbicacion" placeholder="Ej: E-8 / A-E" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Plano Referencia:</label>
+                            <input type="text" id="protPlanoRef" placeholder="Ej: PROY_CI_1_ENC" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Fila 5: Elemento -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Elemento Específico a Liberar:</label>
+                        <input type="text" id="protElemento" placeholder="Ej: Techo: Losa de la cisterna de consumo 1 y 2" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-corpBlue-500 font-bold text-slate-800">
+                    </div>
+                </div>
+            </details>
+
+            <!-- ACORDEÓN: CHECKLISTS DINÁMICOS -->
+            <details class="bg-white rounded-xl shadow-sm border border-slate-200 group" open>
+                <summary class="px-6 py-4 cursor-pointer flex justify-between items-center border-b border-slate-100 bg-slate-50 rounded-t-xl hover:bg-slate-100 transition">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-amber-600">assignment_turned_in</span> Listas de Verificación (Checklists)</h2>
+                    <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div class="p-6">
+                    <p class="text-xs text-slate-500 mb-4">Los siguientes criterios han sido pre-cargados según el tipo de protocolo. Puede modificarlos o agregar nuevas filas si la inspección lo requiere.</p>
+                    <div id="contenedorChecklistsDinamicos" class="space-y-8"></div>
+                </div>
+            </details>
+            
+            <!-- ACORDEÓN: RESPONSABLES Y FIRMAS FINALES (FLUJO AUTORIZADO) -->
+            <details class="bg-white rounded-xl shadow-sm border border-slate-200 group" open>
+                <summary class="px-6 py-4 cursor-pointer flex justify-between items-center border-b border-slate-100 bg-slate-50 rounded-t-xl hover:bg-slate-100 transition">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-corpGreen">draw</span> Aprobación Final del Protocolo</h2>
+                    <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        <!-- ELABORADO POR -->
+                        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col gap-3 relative">
+                            <h4 class="text-xs font-black text-center text-slate-600 uppercase tracking-widest border-b border-slate-200 pb-2">Elaborado Por</h4>
+                            <div class="flex-1 flex flex-col justify-center">
+                                <div id="firmaElaboradoDisplay" class="hidden text-center p-3 bg-emerald-50 border border-emerald-200 rounded-lg shadow-inner">
+                                    <span class="material-symbols-outlined text-emerald-500 mb-1">verified</span>
+                                    <p class="text-sm font-bold text-emerald-800" id="firmaElaboradoNombre">--</p>
+                                    <p class="text-[10px] font-bold text-emerald-600 uppercase" id="firmaElaboradoCargo">--</p>
+                                    <p class="text-[10px] text-emerald-500 mt-1 font-medium" id="firmaElaboradoFecha">--</p>
+                                </div>
+                            </div>
+                            <button type="button" id="btnFirmaElaborado" onclick="window.ejecutarFirmaDigital('elaborado')" class="w-full bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">edit_document</span> Firmar como Elaborado
+                            </button>
+                            <input type="hidden" id="firmaElaboradoData" value="">
+                        </div>
+
+                        <!-- REVISADO POR -->
+                        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col gap-3 relative">
+                            <h4 class="text-xs font-black text-center text-slate-600 uppercase tracking-widest border-b border-slate-200 pb-2">Revisado Por</h4>
+                            <div class="flex-1 flex flex-col justify-center">
+                                <div id="firmaRevisadoDisplay" class="hidden text-center p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-inner">
+                                    <span class="material-symbols-outlined text-blue-500 mb-1">verified</span>
+                                    <p class="text-sm font-bold text-blue-800" id="firmaRevisadoNombre">--</p>
+                                    <p class="text-[10px] font-bold text-blue-600 uppercase" id="firmaRevisadoCargo">--</p>
+                                    <p class="text-[10px] text-blue-500 mt-1 font-medium" id="firmaRevisadoFecha">--</p>
+                                </div>
+                            </div>
+                            <button type="button" id="btnFirmaRevisado" onclick="window.ejecutarFirmaDigital('revisado')" class="w-full bg-corpBlue-600 hover:bg-corpBlue-700 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">edit_document</span> Firmar como Revisado
+                            </button>
+                            <input type="hidden" id="firmaRevisadoData" value="">
+                        </div>
+
+                        <!-- APROBADO POR -->
+                        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col gap-3 relative">
+                            <h4 class="text-xs font-black text-center text-slate-600 uppercase tracking-widest border-b border-slate-200 pb-2">Aprobado Por</h4>
+                            <div class="flex-1 flex flex-col justify-center">
+                                <div id="firmaAprobadoDisplay" class="hidden text-center p-3 bg-indigo-50 border border-indigo-200 rounded-lg shadow-inner">
+                                    <span class="material-symbols-outlined text-indigo-500 mb-1">verified</span>
+                                    <p class="text-sm font-bold text-indigo-800" id="firmaAprobadoNombre">--</p>
+                                    <p class="text-[10px] font-bold text-indigo-600 uppercase" id="firmaAprobadoCargo">--</p>
+                                    <p class="text-[10px] text-indigo-500 mt-1 font-medium" id="firmaAprobadoFecha">--</p>
+                                </div>
+                            </div>
+                            <button type="button" id="btnFirmaAprobado" onclick="window.ejecutarFirmaDigital('aprobado')" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">verified_user</span> Aprobar Protocolo
+                            </button>
+                            <input type="hidden" id="firmaAprobadoData" value="">
+                        </div>
+
+                    </div>
+                </div>
+            </details>
+
+            <!-- SELECTOR DE ESTADO DEL FLUJO (AUTOMATIZADO) -->
+            <div class="mt-6 mb-2 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col shadow-sm transition-all" id="contenedorEstadoFlujo">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-amber-500">pending_actions</span> Estado del Protocolo:
+                    </span>
+                    <!-- Se añade disabled y bg-slate-200 para que el usuario no lo manipule -->
+                    <select id="protEstadoFlujo" class="p-2 border border-slate-300 rounded-lg text-sm font-bold outline-none focus:border-corpBlue-500 bg-slate-200 text-corpBlue-700 cursor-not-allowed appearance-none" disabled>
+                        <option value="En proceso">En proceso (Anotaciones)</option>
+                        <option value="Observado">Observado (No liberado)</option>
+                        <option value="Liberado">Liberado (Sin observaciones)</option>
+                        <option value="Digitalizado">Digitalizado (PDF firmado y cargado)</option>
+                    </select>
+                </div>
+                
+                <!-- CONTENEDOR PARA PDF DIGITALIZADO (Oculto por defecto) -->
+                <div id="contenedorPdfDigitalizado" class="hidden mt-4 pt-4 border-t border-slate-200">
+                    <p class="text-xs font-bold text-slate-600 mb-2">Documento Final Escaneado:</p>
+                    <div class="flex items-center justify-between bg-white border border-slate-300 p-2 rounded-lg">
+                        <div class="flex items-center gap-2 text-red-600">
+                            <span class="material-symbols-outlined">picture_as_pdf</span>
+                            <a href="#" id="linkPdfFinal" target="_blank" class="text-sm font-bold hover:underline">protocolo_firmado.pdf</a>
+                        </div>
+                        <!-- Botón para subir o actualizar el PDF final -->
+                        <label class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition">
+                            Subir PDF Físico
+                            <input type="file" id="inputSubirPdfFinal" class="hidden" accept="application/pdf" onchange="alert('Módulo de subida a Storage en construcción')">
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- INPUTS OCULTOS PARA EVITAR DUPLICADOS Y COLISIONES AL EDITAR -->
+            <input type="hidden" id="protocoloIdActual" value="">
+            <input type="hidden" id="protocoloUltimoTimestamp" value="">
+            
+            <button type="button" onclick="window.guardarProtocoloCompleto()" class="w-full mt-2 bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-4 rounded-xl flex justify-center items-center gap-2 transition shadow-md">
+                <span class="material-symbols-outlined">save</span> Guardar Protocolo
+            </button>
+        </div>
+
+        <!-- 2. PESTAÑA: PLANOS & ANEXOS -->
+        <div id="tabPlanos" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">collections</span> Anexos y Capturas de Planos Marcados
+            </h2>
+            <div class="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-700 text-sm">Cargar Foto de Plano o Detalle Técnico</h3>
+                    <p class="text-xs text-slate-500">Tome foto al plano y use el editor para aplicar resaltador en el área liberada.</p>
+                </div>
+                <label class="bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-2.5 px-5 rounded-lg text-xs flex items-center gap-2 cursor-pointer shadow-sm transition shrink-0">
+                    <span class="material-symbols-outlined text-base">add_a_photo</span> Subir Plano a Marcar
+                    <input type="file" id="inputFotoPlano" class="hidden" accept="image/*" onchange="window.cargarPlanoAlCanvas(this)">
+                </label>
+            </div>
+            <div id="galeriaAnexosPlanos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="col-span-full text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 font-bold text-xs">
+                    Sin planos ni anexos marcados asignados a este protocolo.
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. PESTAÑA: REPORTE (PDF Y ENVÍO) -->
+        <div id="tabReporte" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">description</span> Emisión de Reporte y Envío
+            </h2>
+            
+            <div class="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-2/3">
+                    <label class="block text-sm font-semibold mb-1 text-slate-700">Seleccione el Protocolo:</label>
+                    <select id="reporteProtocoloSelect" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500">
+                        <option value="" disabled selected>Busque y seleccione un protocolo...</option>
+                    </select>
+                </div>
+                <button type="button" onclick="window.generarDossierPdfProtocolo()" class="w-full md:w-1/3 bg-corpBlue-600 hover:bg-corpBlue-700 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
+                    <span class="material-symbols-outlined text-lg">magic_button</span> Compilar PDF
+                </button>
+            </div>
+
+            <!-- Contenedor para el Iframe del PDF -->
+            <div id="pdfContenedorRaiz" class="hidden flex-col items-center gap-4 bg-slate-200 p-2 md:p-4 rounded-xl border border-slate-300 mb-6 w-full h-[500px]">
+            </div>          
+        </div>
+
+        <!-- 4. PESTAÑA: STATUS -->
+        <div id="tabStatus" class="tab-content bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <span class="material-symbols-outlined text-corpBlue-600">analytics</span> Búsqueda y Estado de Protocolos
+            </h2>
+            
+            <!-- Barra de Filtros Inteligente -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Desde:</label>
+                            <input type="date" id="filtroDesde" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500 text-sm shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Hasta:</label>
+                            <input type="date" id="filtroHasta" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500 text-sm shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Estado:</label>
+                            <select id="filtroEstado" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-corpBlue-500 text-sm shadow-sm">
+                                <option value="">Todos</option>
+                                <option value="En proceso">En proceso (Anotaciones)</option>
+                                <option value="Observado">Observado (No liberado)</option>
+                                <option value="Liberado">Liberado (Sin observaciones)</option>
+                                <option value="Digitalizado">Digitalizado (PDF cargado)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="flex md:w-32 lg:w-40 shrink-0 mt-4 md:mt-0 items-end">
+                        <!-- Dispara la función que gestiona el Caché en RAM -->
+                        <button type="button" onclick="window.buscarProtocolos()" class="w-full h-[42px] bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg flex justify-center items-center gap-2 transition shadow-sm">
+                            <span class="material-symbols-outlined text-lg">filter_alt</span> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pantalla de Carga de Sincronización -->
+            <div id="loadingStatus" class="hidden text-center py-8 text-corpBlue-600 font-bold flex-col items-center justify-center gap-2">
+                <span class="material-symbols-outlined animate-spin text-3xl">refresh</span>
+                <span class="text-sm">Sincronizando con la base de datos...</span>
+            </div>
+            
+            <!-- Contenedor donde se inyectan las Tarjetas Rápidamente -->
+            <div id="resultadosStatus" class="space-y-4"></div>
+        </div>
+    </main>
+
+    <script type="module" src="protocolos_cal.js"></script>
+    <script type="module" src="sidebar.js"></script>
+</body>
+</html>
