@@ -298,7 +298,7 @@ window.guardarYEnviarLote = async function() {
     }
 
     if (errores === 0) {
-        alert(`✅ Subida exitosa. Tu backend ya está estampando las fotos y enviándolas a Google Drive.`);
+        alert(`✅ Carga exitosa. Enviando fotos a Google Drive.`);
     } else {
         alert(`⚠️ Proceso terminado, pero ocurrieron ${errores} errores al enviar.`);
     }
@@ -310,7 +310,7 @@ window.guardarYEnviarLote = async function() {
 };
 
 function restaurarBotonSubida(btn) {
-    btn.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Subir Fotos a Firebase`;
+    btn.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Subir Fotos a la nube`;
     btn.disabled = false;
     document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Listo para nuevo lote</span>`;
 }
