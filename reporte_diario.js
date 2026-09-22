@@ -142,7 +142,7 @@ window.addActividadRow = function(texto = "") {
     div.innerHTML = `
         <button type="button" class="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600 transition" onclick="this.parentElement.remove()">✕</button>
         
-        <textarea class="act-texto w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none mb-3" rows="2" placeholder="Describe la actividad realizada...">${texto}</textarea>
+        <textarea class="act-texto w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none mb-3" rows="2" placeholder="Describe las actividad realizada...">${texto}</textarea>
         
         <div class="flex gap-3 mb-4">
             <div class="flex-1 flex flex-col sm:flex-row gap-2 justify-center">
@@ -169,7 +169,7 @@ window.addActividadRow = function(texto = "") {
         </div>
         
         <button type="button" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg text-sm transition shadow-sm btn-submit-act" onclick="window.submitActividad(this)">
-            Guardar Actividad Individual
+            Guardar Actividad + Foto
         </button>
     `;
     document.getElementById('actividadesContainer').appendChild(div);
@@ -591,7 +591,7 @@ window.submitActividad = async function(btn) {
 
         // 2. Si tomó una foto NUEVA física, mandarla al backend
         if (fileOriginal && !fotoGaleriaUrl) {
-            btn.innerHTML = `Enviando a Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+            btn.innerHTML = `Enviando a Google Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
             
             const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
             const tempPath = `temp_fotos/ACT_${Date.now()}.jpg`;
@@ -669,7 +669,7 @@ window.submitPersonal = async function() {
             personal: arrayUnion(...personalArray)
         }, { merge: true });
 
-        btn.innerHTML = "✅ Personal Guardado";
+        btn.innerHTML = "✅ Personal y frentes Guardados";
         setTimeout(() => {
             document.getElementById('personnelContainer').innerHTML = ""; 
             window.addPersonnelRow(); 
@@ -709,7 +709,7 @@ window.submitAnotaciones = async function() {
     const btn = document.getElementById('btnAnotaciones');
     const origText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = "Guardando en Firebase...";
+    btn.innerHTML = "Guardando en Google Drive";
 
     try {
         const docId = fechaInput + "_" + PROJECT_ID;
@@ -890,7 +890,7 @@ window.renderizarEdicion = function() {
         html += `<p class="text-sm text-slate-500 italic mb-6">No hay actividades guardadas.</p>`;
     }
 
-    html += `<h3 class="font-bold text-indigo-700 border-b pb-2 mb-3 mt-6 text-lg">Personal Registrado</h3>`;
+    html += `<h3 class="font-bold text-indigo-700 border-b pb-2 mb-3 mt-6 text-lg">Personal y Frente Registrado</h3>`;
     if (data.personal && data.personal.length > 0) {
         const getEspOptions = (selected) => {
             let opt = '<option value="" disabled>Especialidad</option>';
@@ -1012,7 +1012,7 @@ window.actualizarActividadEdicion = async function(btn, index) {
 
         // 3. SI SUBIÓ UNA FOTO NUEVA, LA ENVIAMOS AL BACKEND
         if (fileOriginal) {
-            btn.innerHTML = `Enviando a Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+            btn.innerHTML = `Enviando a Google Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
             
             const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
             const tempPath = `temp_fotos/EDIT_${Date.now()}.jpg`;
@@ -1181,7 +1181,7 @@ window.accionGenerarPrevisualizacion = async function() {
     localStorage.setItem("firmaResidente", firma);
 
     const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Compilando Vectorial...`;
+    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Generando Formato`;
     btn.disabled = true;
 
     try {
@@ -1304,7 +1304,7 @@ window.accionGenerarPrevisualizacion = async function() {
             btnGuardar.classList.remove('hidden');
             btnGuardar.classList.add('flex');
             btnGuardar.onclick = window.accionGuardarPDFDefinitivo;
-            btnGuardar.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Generar PDF / Guardar Oficialmente`;
+            btnGuardar.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Guardar PDF en Google Drive`;
         });
 
     } catch (error) {
@@ -1352,8 +1352,8 @@ window.cargarDatosMensajeria = async function() {
         const docId = fecha + "_" + PROJECT_ID;
         const docSnap = await getDoc(doc(db, "reportes_diarios", docId));
         
-        if (docSnap.exists() && docSnap.data().url_pdf_oficial) {
-            window.CURRENT_PDF_URL_TO_SEND = docSnap.data().url_pdf_oficial;
+        if (docSnap.exists() && docSnap.data().url_pdf_drive) {
+            window.CURRENT_PDF_URL_TO_SEND = docSnap.data().url_pdf_drive;
             linkDescarga = window.CURRENT_PDF_URL_TO_SEND;
         } else {
             window.CURRENT_PDF_URL_TO_SEND = null;
@@ -1411,7 +1411,7 @@ window.accionGuardarPDFDefinitivo = async function() {
     if (!pdfBlobGenerado) return alert("Primero debe generar la vista previa del documento.");
 
     const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="material-symbols-outlined animate-spin align-middle">refresh</span> Guardando Oficialmente...`;
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin align-middle">refresh</span> Guardando en Google Drive`;
     btn.disabled = true;
 
     try {
@@ -1472,7 +1472,7 @@ window.accionGuardarPDFDefinitivo = async function() {
             window.cargarDatosMensajeria();
         }
 
-        alert("¡PDF Guardado con éxito! Se está procesando su copia en Google Drive en segundo plano.");
+        alert("PDF Guardado con éxito. Se está procesando en Google Drive en segundo plano.");
         
     } catch (error) {
         console.error("Error al guardar el PDF oficial:", error);
