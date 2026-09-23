@@ -1248,11 +1248,10 @@ window.generarDossierPdfProtocolo = async function() {
         data._docId = obsSnap.id;
         CURRENT_PROT_PREVIEW = data;
 
-        // 2. Preparar los datos corporativos
+        // 2. Preparar los datos corporativos heredados del APP_STATE
         let logoB64 = null;
         if (window.APP_STATE.empresa?.logo) {
             try {
-                // Función auxiliar simplificada para convertir logo a Base64
                 const response = await fetch(window.APP_STATE.empresa.logo);
                 if (response.ok) {
                     const blob = await response.blob();
@@ -1265,21 +1264,23 @@ window.generarDossierPdfProtocolo = async function() {
             } catch (e) { console.warn("No se pudo cargar el logo:", e); }
         }
 
-        // Obtener nombres completos del diccionario
+        // Recuperación de variables heredadas directamente desde el proyecto activo
+        const proj = window.APP_STATE.proyectoActivo || {};
         const dictEmpresas = JSON.parse(localStorage.getItem("INDEX_EMPRESAS_DICT") || "{}");
-        const nombreCliente = dictEmpresas[window.APP_STATE.proyectoActivo.idClienteOficial] || window.APP_STATE.proyectoActivo.cliente || "No especificado";
-        const nombreSupervision = dictEmpresas[window.APP_STATE.proyectoActivo.idSupervisionOficial] || window.APP_STATE.proyectoActivo.supervision || "No especificado";
-        const nombreContratista = window.APP_STATE.empresa?.nombre || "EMPRESA CONTRATISTA";
 
-        // Obtener nombre amigable del protocolo
-        const mapaProtocolos = window.APP_STATE.proyectoActivo.protocolosMap || {};
-        const nombreAmigable = mapaProtocolos[data.tipo_protocolo] || data.tipo_protocolo.replace(/_/g, ' ').toUpperCase();
+        // Buscamos primero en el diccionario oficial, y si no, en las variables directas del proyecto
+        const nombreCliente = dictEmpresas[proj.idClienteOficial] || proj.client_proyect || proj.cliente || "No especificado";
+        const nombreSupervision = dictEmpresas[proj.idSupervisionOficial] || proj.supervision_proyect || proj.supervision || "No especificado";
+        const nombreContratista = dictEmpresas[proj.idContratistaOficial] || proj.contratista_proyect || window.APP_STATE.empresa?.nombre || "EMPRESA CONTRATISTA";
 
-        // 3. Estructurar el JSON exacto que espera la plantilla
+        const mapaProtocolos = proj.protocolosMap || {};
+        const nombreAmigable = mapaProtocolos[data.tipo_protocolo] || (data.tipo_protocolo || '').replace(/_/g, ' ').toUpperCase();
+
+        // 3. Estructurar el JSON con metadatos completos y trazabilidad de secciones
         const datosPlantilla = {
             logo: logoB64,
             proyecto: {
-                nombre: window.APP_STATE.proyectoActivo.nombre,
+                nombre: proj.nombre || "PROYECTO SIN NOMBRE",
                 cliente: nombreCliente,
                 supervision: nombreSupervision,
                 contratista: nombreContratista
