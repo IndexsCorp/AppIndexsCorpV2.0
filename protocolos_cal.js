@@ -3,8 +3,7 @@
 // ==========================================
 
 import { auth, db, initAppCore } from "./app_core.js";
-import { doc, getDoc, collection, query, where, getDocs, setDoc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-
+import { doc, getDoc, collection, query, where, getDocs, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 // ==========================================
 // 0. MATRIZ DE PERMISOS (SISTEMA RBAC - PROTOCOLOS)
 // ==========================================
@@ -86,26 +85,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 selectProtocolo.innerHTML = '<option value="" disabled>No hay protocolos asignados al proyecto</option>';
             }
         }
-
-        // --- RESTRICCIÓN VISUAL DE PESTAÑAS USANDO EL GUARDIÁN ---
-        if (!window.tienePermiso("ver_pestanas_avanzadas", false)) {
-            // Ocultar pestañas 1, 2 y 3 para roles no autorizados (ej. Cliente)
-            const tabRegistro = document.getElementById('btnTabRegistro');
-            if (tabRegistro) tabRegistro.classList.add('hidden');
-            
-            const tabPlanos = document.getElementById('btnTabPlanos');
-            if (tabPlanos) tabPlanos.classList.add('hidden');
-
-            const tabReporte = document.getElementById('btnTabReporte');
-            if (tabReporte) tabReporte.classList.add('hidden');
-
-            // Forzar al usuario a iniciar directamente en la pestaña de Status
-            window.switchTab('status');
-        }
-
+        
         if (pantallaCarga) pantallaCarga.classList.add('hidden');
         if (navbarGlobal) navbarGlobal.classList.remove('hidden');
         if (mainContent) mainContent.classList.remove('hidden');
+
+        window.switchTab('registro');
 
     }).catch(error => {
         console.error("Error al iniciar Protocolos:", error);
@@ -113,27 +98,51 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ==========================================
-// NAVEGACIÓN ENTRE LAS 4 PESTAÑAS
+// NAVEGACIÓN ENTRE LAS 3 PESTAÑAS
 // ==========================================
 window.switchTab = function(tabId) {
+    // 1. Resetear botones visualmente
     document.querySelectorAll('.tab-btn').forEach(b => { 
         b.classList.remove('active', 'bg-corpBlue-600', 'text-white', 'border-corpBlue-600'); 
         b.classList.add('bg-white', 'text-slate-500', 'border-slate-300'); 
     });
     
+    // 2. Ocultar todos los contenidos
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     
-    const mapBtn = { 'registro': 'btnTabRegistro', 'planos': 'btnTabPlanos', 'reporte': 'btnTabReporte', 'status': 'btnTabStatus' };
-    const mapContent = { 'registro': 'tabRegistro', 'planos': 'tabPlanos', 'reporte': 'tabReporte', 'status': 'tabStatus' };
+    // 3. Mapeo de Pestañas
+    const mapBtn = { 'registro': 'btnTabRegistro', 'status': 'btnTabStatus', 'reporte': 'btnTabReporte' };
+    const mapContent = { 'registro': 'tabRegistro', 'status': 'tabStatus', 'reporte': 'tabReporte' };
 
+    // 4. Activar el botón seleccionado
     const btn = document.getElementById(mapBtn[tabId]);
     if (btn) {
         btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-300'); 
         btn.classList.add('active', 'bg-corpBlue-600', 'text-white', 'border-corpBlue-600');
     }
     
+    // 5. Mostrar el contenido seleccionado
     const content = document.getElementById(mapContent[tabId]);
     if (content) content.classList.add('active');
+
+    // 6. Controlar visibilidad de la barra de guardado global (Solo visible en Registro)
+    const barraAcciones = document.getElementById('barraAccionesGlobales');
+    if (barraAcciones) {
+        if (tabId === 'registro') {
+            barraAcciones.classList.remove('hidden');
+            barraAcciones.classList.add('flex');
+        } else {
+            barraAcciones.classList.add('hidden');
+            barraAcciones.classList.remove('flex');
+        }
+    }
+
+    // 7. MAGIA: Disparador automático para llenar el selector de PDFs en la pestaña 3
+    if (tabId === 'reporte') {
+        if (typeof window.cargarComboProtocolos === 'function') {
+            window.cargarComboProtocolos();
+        }
+    }
 };
 
 // ==========================================
@@ -176,6 +185,10 @@ window.cargarPlantillaChecklist = async function(tipoProtocolo) {
                             <th class="p-2.5 w-10 text-center"></th>
                         </tr>
                     </thead>
+                    
+                    <!-- AQUÍ SE AÑADIÓ LA ETIQUETA TBODY CON EL ID DINÁMICO -->
+                    <tbody id="tbody_seccion_${secIndex}">
+                    
                     ${seccion.items.map((item, itemIndex) => `
                             <tr class="border-b border-slate-100 hover:bg-slate-50">
                                 <td class="p-2 text-center font-bold text-slate-400">${itemIndex + 1}</td>
@@ -276,10 +289,28 @@ window.agregarFilaChecklist = function(tbodyId, secIndex) {
 
 window.agregarItemLista = async function(campoBD, selectId) {
     if (!window.tienePermiso("crear_editar")) return;
-    const nuevoItem = prompt(`Ingrese el nuevo nombre para agregar a la lista:`);
+
+    // 1. Obtener y ordenar la lista actual desde el caché global
+    let listaActual = window.APP_STATE?.proyectoActivo?.[campoBD] || [];
+    listaActual.sort((a, b) => a.localeCompare(b));
+    
+    // 2. Crear el texto para mostrar en el cuadro de diálogo
+    let textoOpciones = listaActual.length > 0 
+        ? "OPCIONES ACTUALES:\n" + listaActual.map(i => `• ${i}`).join("\n") 
+        : "No hay opciones registradas.";
+        
+    const nuevoItem = prompt(`${textoOpciones}\n\nIngrese el nuevo nombre para agregar a la lista:`);
     if (!nuevoItem || nuevoItem.trim() === "") return;
     
     const valorLimpio = nuevoItem.trim();
+    
+    // 3. Evitar duplicados (ignorando mayúsculas/minúsculas)
+    const existe = listaActual.some(item => item.toLowerCase() === valorLimpio.toLowerCase());
+    if (existe) {
+        alert("⚠️ Este ítem ya existe en la lista.");
+        return;
+    }
+
     const proyectoId = window.APP_STATE.proyectoActivo.id;
     
     try {
@@ -288,7 +319,6 @@ window.agregarItemLista = async function(campoBD, selectId) {
             [campoBD]: arrayUnion(valorLimpio)
         });
         
-        alert("Ítem añadido correctamente a la base de datos.");
         await window.recargarListaEspecifica(campoBD, selectId);
         
         // Forzar la selección del ítem recién creado
@@ -302,8 +332,9 @@ window.agregarItemLista = async function(campoBD, selectId) {
 
 window.eliminarItemLista = async function(campoBD, selectId) {
     if (!window.tienePermiso("crear_editar")) return;
+
     const selectElement = document.getElementById(selectId);
-    const itemAEliminar = selectElement.value;
+    const itemAEliminar = selectElement.value; // Toma el ítem que el usuario seleccionó visualmente
     
     if (!itemAEliminar) {
         alert("Primero seleccione en la lista el ítem que desea eliminar.");
@@ -319,7 +350,6 @@ window.eliminarItemLista = async function(campoBD, selectId) {
             [campoBD]: arrayRemove(itemAEliminar)
         });
         
-        alert("Ítem eliminado correctamente.");
         await window.recargarListaEspecifica(campoBD, selectId);
         
     } catch (error) {
@@ -332,10 +362,9 @@ window.recargarListaEspecifica = async function(campoBD, selectId) {
     const selectElement = document.getElementById(selectId);
     if (!selectElement) return;
     
-    // 1. Guardar en memoria la opción que el usuario tiene seleccionada
+    // 1. Guardar en memoria la opción que el usuario tiene seleccionada para no reiniciarla
     const seleccionActual = selectElement.value;
     
-    // 2. Estado de carga visual
     selectElement.innerHTML = '<option value="" disabled selected>Sincronizando...</option>';
     
     try {
@@ -344,9 +373,12 @@ window.recargarListaEspecifica = async function(campoBD, selectId) {
         
         if (docRef.exists()) {
             const data = docRef.data();
-            const nuevaLista = data[campoBD] || [];
+            let nuevaLista = data[campoBD] || [];
             
-            // Actualizar la caché global en memoria y en localStorage
+            // 2. Ordenar alfabéticamente siempre
+            nuevaLista.sort((a, b) => a.localeCompare(b));
+            
+            // Actualizar la caché
             window.APP_STATE.proyectoActivo[campoBD] = nuevaLista;
             localStorage.setItem("INDEX_APP_STATE", JSON.stringify(window.APP_STATE));
             
@@ -515,8 +547,9 @@ window.ejecutarFirmaDigital = function(tipo) {
 // ==========================================
 window.guardarProtocoloCompleto = async function(event) {
     if (!window.tienePermiso("crear_editar")) return;
+    
     // Referencia al botón para animación de carga
-    const btn = event ? event.currentTarget : document.querySelector('button[onclick="window.guardarProtocoloCompleto()"]');
+    const btn = event ? event.currentTarget : document.querySelector('button[onclick="window.guardarProtocoloCompleto(event)"]');
     const htmlOriginal = btn ? btn.innerHTML : "Guardar Protocolo";
 
     try {
@@ -541,7 +574,7 @@ window.guardarProtocoloCompleto = async function(event) {
             btn.disabled = true;
         }
 
-        // 2. Recopilar Checklists Dinámicos (Las Ramas)
+        // 2. Recopilar Checklists Dinámicos directamente de la pantalla (DOM)
         const checklistsData = [];
         const seccionesDinamicas = document.querySelectorAll('#contenedorChecklistsDinamicos > div[data-seccion]');
 
@@ -550,7 +583,7 @@ window.guardarProtocoloCompleto = async function(event) {
             const tituloSeccion = seccionDiv.querySelector('h3').innerText;
 
             // Iterar sobre las filas (items) de la tabla
-            const filas = seccionDiv.querySelectorAll(`tbody#tbody_seccion_${secIndex} tr`);
+            const filas = seccionDiv.querySelectorAll(`tbody tr`);
             const items = [];
 
             filas.forEach(tr => {
@@ -567,7 +600,7 @@ window.guardarProtocoloCompleto = async function(event) {
                     items.push({
                         descripcion: inputDesc.value.trim(),
                         estado: radioSeleccionado ? radioSeleccionado.value : "NA",
-                        traza: datosTraza // <- Aquí se adjunta la firma digital al JSON
+                        traza: datosTraza
                     });
                 }
             });
@@ -592,7 +625,7 @@ window.guardarProtocoloCompleto = async function(event) {
             });
         });
 
-        // 3. Recopilar Firmas Finales (Extrayendo desde el JSON oculto)
+        // 3. Recopilar Firmas Finales
         const extraerFirma = (tipo) => {
             const capTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
             const hiddenInput = document.getElementById(`firma${capTipo}Data`);
@@ -610,7 +643,7 @@ window.guardarProtocoloCompleto = async function(event) {
             aprobado: extraerFirma('aprobado')
         };
 
-        // 4. Estructurar el Documento JSON Completo
+        // 4. Lógica de Documentos en Firebase
         const proyectoId = window.APP_STATE.proyectoActivo.id;
         const inputIdActual = document.getElementById('protocoloIdActual');
         const inputTimestampUI = document.getElementById('protocoloUltimoTimestamp');
@@ -618,32 +651,25 @@ window.guardarProtocoloCompleto = async function(event) {
         let nuevaReferencia;
         const coleccionRef = collection(db, "protocolos_calidad");
 
-        // LÓGICA ANTI-DUPLICADOS Y CONTROL DE CONCURRENCIA
         if (inputIdActual && inputIdActual.value !== "") {
             nuevaReferencia = doc(coleccionRef, inputIdActual.value);
             
-            // CANDADO: Verificamos si alguien más lo modificó antes de dejarte guardar
             const docSnap = await getDoc(nuevaReferencia);
             if (docSnap.exists()) {
                 const dataBD = docSnap.data();
-                // Extraer el tiempo de la BD. Si no existe, asume 0.
                 const tiempoBD = dataBD.timestamp ? dataBD.timestamp.toDate().getTime() : 0;
                 const tiempoUI = (inputTimestampUI && inputTimestampUI.value) ? parseInt(inputTimestampUI.value) : 0;
                 
-                // Si el tiempo en la base de datos es mayor al de la pantalla, alguien guardó antes que tú
                 if (tiempoBD > tiempoUI && tiempoUI !== 0) {
                     alert("⚠️ ALERTA DE CONFLICTO:\n\nOtro usuario ha modificado este protocolo mientras lo tenías abierto. El guardado ha sido bloqueado para no borrar su trabajo.\n\nPor favor, actualiza la página e inténtalo de nuevo.");
                     if (btn) { btn.innerHTML = htmlOriginal; btn.disabled = false; }
-                    return; // Abortamos el guardado
+                    return; 
                 }
             }
         } else {
-            // Es un documento totalmente nuevo
             nuevaReferencia = doc(coleccionRef);
             if (inputIdActual) inputIdActual.value = nuevaReferencia.id; 
         }
-
-        const momentoGuardado = new Date(); // La nueva estampa de tiempo oficial
 
         const protocoloDocumento = {
             id_proyecto: proyectoId,
@@ -656,22 +682,18 @@ window.guardarProtocoloCompleto = async function(event) {
             ubicacion: ubicacion,
             plano_ref: planoRef,
             elemento: elemento,
-            estado_flujo: estadoCalculado, // Utiliza el estado calculado automáticamente
+            estado_flujo: estadoFlujo, 
             checklists: checklistsData,
             firmas_finales: firmasFinales,
-            anexos: [], 
-            timestamp: momentoGuardado
+            timestamp: serverTimestamp() 
         };
 
         // 5. Guardar en Firestore
         await setDoc(nuevaReferencia, protocoloDocumento);
 
-        // Actualizamos la estampa de tiempo en la pantalla para que puedas seguir editando sin recargar
-        if (inputTimestampUI) inputTimestampUI.value = momentoGuardado.getTime();
+        if (inputTimestampUI) inputTimestampUI.value = new Date().getTime();
 
-        alert(`✅ Protocolo N° ${correlativo} guardado exitosamente como: ${estadoCalculado}`);
-        
-        // Tras el éxito, movemos al usuario a la pestaña Status
+        alert(`✅ Protocolo N° ${correlativo} guardado exitosamente como: ${estadoFlujo}`);
         window.switchTab('status');
 
     } catch (error) {
@@ -908,7 +930,7 @@ window.renderizarProtocolosDesdeCache = function() {
     if(!contenedor) return;
     contenedor.innerHTML = '';
 
-    // Filtrar la memoria RAM en microsegundos
+    // 1. Filtrar la memoria RAM
     const docsFiltrados = window.PROT_CACHE.filter(prot => {
         let cumpleFecha = true;
         if (filtroDesde) cumpleFecha = cumpleFecha && (prot.fecha_registro >= filtroDesde);
@@ -927,23 +949,56 @@ window.renderizarProtocolosDesdeCache = function() {
                 <p>No se encontraron protocolos con estos filtros.</p>
                 <button type="button" onclick="window.buscarProtocolos(true)" class="mt-4 text-corpBlue-600 hover:text-corpBlue-700 underline text-sm transition">Forzar sincronización con la nube</button>
             </div>`;
-    } else {
-        docsFiltrados.forEach(prot => {
-            // Asignar color al estado
+        return;
+    }
+
+    // 2. Agrupar protocolos por tipo
+    const agrupados = {};
+    docsFiltrados.forEach(prot => {
+        const tipo = prot.tipo_protocolo || 'Sin_Tipo';
+        if (!agrupados[tipo]) agrupados[tipo] = [];
+        agrupados[tipo].push(prot);
+    });
+
+    // 3. Obtener el diccionario de nombres amigables de tu app_core
+    const mapaProtocolos = window.APP_STATE?.proyectoActivo?.protocolosMap || {};
+
+    let htmlFinal = '';
+
+    // 4. Renderizar un Acordeón por cada Tipo de Protocolo
+    for (const [tipoCode, listaProt] of Object.entries(agrupados)) {
+        
+        // Traducir el código (ej. prot_1_aec) al nombre legible (ej. Acero, encofrado...)
+        const nombreAmigable = mapaProtocolos[tipoCode] || tipoCode.replace(/_/g, ' ').toUpperCase();
+
+        htmlFinal += `
+            <details class="bg-white rounded-xl shadow-sm border border-slate-200 group mb-4" open>
+                <summary class="px-6 py-4 cursor-pointer flex justify-between items-center border-b border-slate-100 bg-slate-50 rounded-t-xl hover:bg-slate-100 transition">
+                    <h3 class="text-sm font-bold text-corpBlue-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-corpBlue-500">folder_open</span> 
+                        ${nombreAmigable} <span class="bg-corpBlue-100 text-corpBlue-700 px-2 py-0.5 rounded-full text-xs ml-2">${listaProt.length}</span>
+                    </h3>
+                    <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div class="p-4 space-y-3 bg-slate-50/50 rounded-b-xl">
+        `;
+
+        // 5. Renderizar las tarjetas dentro de su acordeón
+        listaProt.forEach(prot => {
             let colorBadge = "bg-slate-100 text-slate-600";
             if(prot.estado_flujo === "Liberado") colorBadge = "bg-emerald-100 text-emerald-700";
             if(prot.estado_flujo === "Observado") colorBadge = "bg-red-100 text-red-700";
             if(prot.estado_flujo === "En proceso") colorBadge = "bg-amber-100 text-amber-700";
             if(prot.estado_flujo === "Digitalizado") colorBadge = "bg-blue-100 text-blue-700";
 
-            contenedor.innerHTML += `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 hover:shadow-md transition mb-3">
+            htmlFinal += `
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 hover:shadow-md transition">
                     <div class="w-full md:w-auto flex-1">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="font-black text-corpBlue-700 text-lg">#${prot.correlativo || 'N/A'}</span>
                             <span class="${colorBadge} px-2 py-0.5 rounded text-[10px] font-bold uppercase">${prot.estado_flujo || 'Desconocido'}</span>
                         </div>
-                        <h4 class="text-sm font-bold text-slate-800 uppercase">${prot.tipo_protocolo ? prot.tipo_protocolo.replace(/_/g, ' ') : 'Sin Tipo'}</h4>
+                        <h4 class="text-sm font-bold text-slate-800">${nombreAmigable}</h4>
                         <p class="text-xs font-semibold text-slate-600 mt-1">${prot.elemento || 'Sin elemento'}</p>
                         <p class="text-[10px] text-slate-500 mt-1 uppercase">
                             <span class="font-bold">Fecha:</span> ${prot.fecha_registro || 'N/A'} | 
@@ -952,22 +1007,29 @@ window.renderizarProtocolosDesdeCache = function() {
                         </p>
                     </div>
                     <div class="flex gap-2 w-full md:w-auto shrink-0">
-                        <button onclick="window.cargarProtocoloEnPantalla('${prot.id_protocolo}')" class="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg text-xs font-bold transition flex justify-center items-center gap-2">
+                        <button onclick="window.cargarProtocoloEnPantalla('${prot.id_protocolo}')" class="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg text-xs font-bold transition flex justify-center items-center gap-2 shadow-sm">
                             <span class="material-symbols-outlined text-[16px]">edit_document</span> Modificar
                         </button>
                     </div>
                 </div>
             `;
         });
-        
-        // Agregar botón discreto de actualización
-        contenedor.innerHTML += `
-            <div class="text-center mt-6 mb-4">
-                <button type="button" onclick="window.buscarProtocolos(true)" class="text-xs text-slate-400 hover:text-corpBlue-600 transition flex items-center justify-center gap-1 mx-auto bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
-                    <span class="material-symbols-outlined text-[14px]">sync</span> Sincronizar últimos cambios de la nube
-                </button>
-            </div>`;
+
+        htmlFinal += `
+                </div>
+            </details>
+        `;
     }
+
+    // Agregar botón discreto de actualización al final
+    htmlFinal += `
+        <div class="text-center mt-6 mb-4">
+            <button type="button" onclick="window.buscarProtocolos(true)" class="text-xs text-slate-400 hover:text-corpBlue-600 transition flex items-center justify-center gap-1 mx-auto bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
+                <span class="material-symbols-outlined text-[14px]">sync</span> Sincronizar últimos cambios de la nube
+            </button>
+        </div>`;
+        
+    contenedor.innerHTML = htmlFinal;
 };
 
 // ==========================================
@@ -1109,4 +1171,222 @@ window.cargarProtocoloEnPantalla = async function(protocoloId) {
         const pantallaCarga = document.getElementById('pantalla-carga');
         if(pantallaCarga) pantallaCarga.classList.add('hidden');
     }
+};
+
+// ==========================================
+// LIMPIAR FORMULARIO (NUEVO PROTOCOLO)
+// ==========================================
+window.limpiarFormularioProtocolo = function() {
+    // 1. Limpiar identificadores ocultos (CRÍTICO para que Firebase cree un documento nuevo)
+    const idActual = document.getElementById('protocoloIdActual');
+    const timestamp = document.getElementById('protocoloUltimoTimestamp');
+    if (idActual) idActual.value = "";
+    if (timestamp) timestamp.value = "0";
+
+    // 2. Limpiar campos generales
+    const campos = ['tipoProtocolo', 'protCorrelativo', 'protUbicacion', 'protPlanoRef', 'protElemento', 'protFrente', 'protSector'];
+    campos.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
+
+    // 3. Resetear el estado
+    const estado = document.getElementById('protEstadoFlujo');
+    if (estado) estado.value = "En proceso";
+
+    // 4. Limpiar el contenedor de checklists dinámicos
+    const contenedorChecklists = document.getElementById('contenedorChecklistsDinamicos');
+    if (contenedorChecklists) {
+        contenedorChecklists.innerHTML = `
+            <div class="p-8 text-center text-slate-400 font-bold border-2 border-dashed border-slate-300 rounded-xl bg-slate-50">
+                <span class="material-symbols-outlined text-4xl mb-2">fact_check</span>
+                <p>Seleccione un tipo de protocolo en los datos generales para cargar su estructura de inspección.</p>
+            </div>
+        `;
+    }
+
+    // 5. Resetear botones de Firmas
+    ['Elaborado', 'Revisado', 'Aprobado'].forEach(tipo => {
+        if (document.getElementById(`firma${tipo}Data`)) document.getElementById(`firma${tipo}Data`).value = "";
+        if (document.getElementById(`btnFirma${tipo}`)) document.getElementById(`btnFirma${tipo}`).classList.remove('hidden');
+        if (document.getElementById(`firma${tipo}Display`)) document.getElementById(`firma${tipo}Display`).classList.add('hidden');
+    });
+
+    // 6. Mover al usuario a la pestaña de registro
+    window.switchTab('registro');
+};
+
+// ==========================================
+// 5. PESTAÑA: PREVISUALIZAR Y GENERAR REPORTE PDF
+// ==========================================
+
+let pdfBlobGeneradoProtocolo = null;
+let CURRENT_PROT_PREVIEW = null;
+
+window.generarDossierPdfProtocolo = async function() {
+    if (!window.tienePermiso("crear_editar")) return;
+    
+    // Obtener el ID del protocolo desde el selector de la pestaña Reportes
+    const select = document.getElementById('reporteProtocoloSelect');
+    const docId = select ? select.value : '';
+
+    if (!docId) return alert("⚠️ Por favor, seleccione un protocolo de la lista superior.");
+
+    const btn = document.querySelector('button[onclick="window.generarDossierPdfProtocolo()"]');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span> Compilando Dossier...`;
+
+    try {
+        // 1. Obtener la data completa desde Firestore
+        const obsRef = doc(db, "protocolos_calidad", docId);
+        const obsSnap = await getDoc(obsRef);
+
+        if (!obsSnap.exists()) return alert("Error: No se encontró el protocolo en la base de datos.");
+
+        const data = obsSnap.data();
+        data._docId = obsSnap.id;
+        CURRENT_PROT_PREVIEW = data;
+
+        // 2. Preparar los datos corporativos
+        let logoB64 = null;
+        if (window.APP_STATE.empresa?.logo) {
+            try {
+                // Función auxiliar simplificada para convertir logo a Base64
+                const response = await fetch(window.APP_STATE.empresa.logo);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    logoB64 = await new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                }
+            } catch (e) { console.warn("No se pudo cargar el logo:", e); }
+        }
+
+        // Obtener nombres completos del diccionario
+        const dictEmpresas = JSON.parse(localStorage.getItem("INDEX_EMPRESAS_DICT") || "{}");
+        const nombreCliente = dictEmpresas[window.APP_STATE.proyectoActivo.idClienteOficial] || window.APP_STATE.proyectoActivo.cliente || "No especificado";
+        const nombreSupervision = dictEmpresas[window.APP_STATE.proyectoActivo.idSupervisionOficial] || window.APP_STATE.proyectoActivo.supervision || "No especificado";
+        const nombreContratista = window.APP_STATE.empresa?.nombre || "EMPRESA CONTRATISTA";
+
+        // Obtener nombre amigable del protocolo
+        const mapaProtocolos = window.APP_STATE.proyectoActivo.protocolosMap || {};
+        const nombreAmigable = mapaProtocolos[data.tipo_protocolo] || data.tipo_protocolo.replace(/_/g, ' ').toUpperCase();
+
+        // 3. Estructurar el JSON exacto que espera la plantilla
+        const datosPlantilla = {
+            logo: logoB64,
+            proyecto: {
+                nombre: window.APP_STATE.proyectoActivo.nombre,
+                cliente: nombreCliente,
+                supervision: nombreSupervision,
+                contratista: nombreContratista
+            },
+            protocolo: {
+                codigo_visible: nombreAmigable,
+                correlativo: data.correlativo || "-",
+                fecha_inspeccion: data.fecha_registro || "-",
+                frente: data.frente || "-",
+                sector: data.sector || "-",
+                ubicacion_ejes: data.ubicacion || "-",
+                plano_referencia: data.plano_ref || "-",
+                elemento_liberar: data.elemento || "-",
+                estado: data.estado_flujo || "En proceso"
+            },
+            checklists: data.checklists || [],
+            firmas: data.firmas_finales || {}
+        };
+
+        // 4. Búsqueda e Inyección de la Plantilla JavaScript (Diseño pdfMake)
+        let generarDocDefinition;
+        const idEmpresa = window.APP_STATE.empresa?.id || 'EMP00001';
+        
+        try {
+            // Busca el diseño de PDF corporativo de la empresa actual (Ej: EMP00002.js)
+            const modulo = await import(`./js/templates/protocolos_calidad/${idEmpresa}.js`);
+            generarDocDefinition = modulo.generarDocDefinition;
+            
+        } catch (e) {
+            console.warn(`Plantilla PDF específica no encontrada para ${idEmpresa}. Cargando diseño por defecto.`, e);
+            // Si la empresa no tiene un diseño único, usa la base EMP00002.js
+            const modulo = await import(`./js/templates/protocolos_calidad/EMP00002.js`);
+            generarDocDefinition = modulo.generarDocDefinition;
+        }
+
+        // 5. Compilar PDF Vectorial
+        const docDefinition = generarDocDefinition(datosPlantilla);
+        const pdfDoc = pdfMake.createPdf(docDefinition);
+
+        pdfDoc.getBlob((blob) => {
+            pdfBlobGeneradoProtocolo = blob;
+            const pdfUrl = URL.createObjectURL(blob);
+
+            const rootCont = document.getElementById('pdfContenedorRaiz');
+            if(!rootCont) return;
+
+            // Detección de celular para no forzar iframes pesados
+            const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (esCelular) {
+                rootCont.innerHTML = `
+                    <div class="text-center p-6 bg-slate-50 rounded-xl w-full border border-slate-300 h-full flex flex-col justify-center items-center">
+                        <span class="material-symbols-outlined text-5xl text-corpBlue-600 mb-2">picture_as_pdf</span>
+                        <p class="text-slate-700 font-bold mb-1 text-base">PDF Compilado Exitosamente</p>
+                        <p class="text-slate-500 text-xs mb-4">La vista previa incrustada no está disponible en móviles.</p>
+                        <a href="${pdfUrl}" target="_blank" class="bg-corpBlue-600 text-white font-bold py-3 px-8 rounded-lg text-sm shadow-md flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[18px]">visibility</span> Abrir Documento
+                        </a>
+                    </div>`;
+            } else {
+                rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-full rounded-xl shadow-md border border-slate-300"></iframe>`;
+            }
+
+            rootCont.classList.remove('hidden');
+            rootCont.classList.add('flex');
+        });
+
+    } catch (error) {
+        console.error("Error al generar PDF de Protocolo:", error);
+        alert("Error crítico al compilar el documento: " + error.message);
+    } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+    }
+};
+
+window.cargarComboProtocolos = async function(filtro = "") {
+    // Si el caché no está cargado (porque el usuario entró directo a esta pestaña), lo forzamos
+    if (!window.PROT_CACHE_LOADED) {
+        await window.buscarProtocolos(false);
+    }
+
+    const select = document.getElementById('reporteProtocoloSelect');
+    if (!select) return;
+
+    const textoBusqueda = filtro.toLowerCase().trim();
+    let optionsHtml = '<option value="" disabled selected>Seleccione un protocolo para compilar...</option>';
+
+    // Obtener el diccionario de nombres amigables
+    const mapaProtocolos = window.APP_STATE?.proyectoActivo?.protocolosMap || {};
+
+    window.PROT_CACHE.forEach(prot => {
+        const nombreAmigable = mapaProtocolos[prot.tipo_protocolo] || prot.tipo_protocolo;
+        
+        // Etiqueta visual para que el usuario sepa si está imprimiendo algo ya liberado
+        let badge = '[PROCESO]';
+        if (prot.estado_flujo === 'Liberado') badge = '[LIBERADO]';
+        else if (prot.estado_flujo === 'Observado') badge = '[OBSERVADO]';
+        else if (prot.estado_flujo === 'Digitalizado') badge = '[DIGITALIZ]';
+
+        // Cadena invisible para que el buscador encuentre coincidencias por número, frente o sector
+        const cadenaInvisible = `${prot.correlativo} ${nombreAmigable} ${prot.estado_flujo} ${prot.frente} ${prot.sector} ${prot.elemento}`.toLowerCase();
+        
+        if (textoBusqueda === "" || cadenaInvisible.includes(textoBusqueda)) {
+            optionsHtml += `<option value="${prot.id_protocolo}">${badge} #${prot.correlativo} - ${nombreAmigable} (${prot.frente} / ${prot.sector})</option>`;
+        }
+    });
+
+    select.innerHTML = optionsHtml;
 };
