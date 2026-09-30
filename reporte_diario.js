@@ -142,9 +142,9 @@ window.addActividadRow = function(texto = "") {
     div.innerHTML = `
         <button type="button" class="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600 transition" onclick="this.parentElement.remove()">✕</button>
         
-        <textarea class="act-texto w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none mb-3" rows="2" placeholder="Describe las actividad realizada...">${texto}</textarea>
+        <textarea class="act-texto w-full p-2.5 text-sm border border-slate-300 rounded-lg outline-none mb-3" rows="2" placeholder="Describe la actividad realizada...">${texto}</textarea>
         
-        <div class="flex gap-3 mb-4">
+        <div class="flex gap-3 mb-2">
             <div class="flex-1 flex flex-col sm:flex-row gap-2 justify-center">
                 <button type="button" class="flex-1 bg-corpBlue-600 hover:bg-corpBlue-700 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-camera').click()">
                     <span class="material-symbols-outlined text-[18px]">photo_camera</span> Tomar
@@ -157,19 +157,16 @@ window.addActividadRow = function(texto = "") {
                 </button>
                 
                 <input type="file" class="act-camera hidden" accept="image/*" capture="environment" onchange="window.previsualizarFoto(this)">
-                <input type="file" class="act-upload hidden" accept="image/*" onchange="window.previsualizarFoto(this)">
-            </div>
-
-            <div class="foto-preview-container hidden w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm">
-                <img class="act-preview-img w-full h-full object-cover rounded-lg">
-                <button type="button" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition" onclick="window.removerFoto(this)">✕</button>
-                <input type="hidden" class="act-foto-url"> 
-                <input type="hidden" class="act-foto-base64">
+                <!-- Añadido atributo "multiple" para poder subir varias de golpe -->
+                <input type="file" class="act-upload hidden" accept="image/*" multiple onchange="window.previsualizarFoto(this)">
             </div>
         </div>
+
+        <!-- NUEVO CONTENEDOR MULTI-FOTOS (Inicia vacío y oculto hasta que agreguen algo) -->
+        <div class="fotos-wrapper flex flex-wrap gap-3 mb-4 empty:hidden pt-2"></div>
         
         <button type="button" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg text-sm transition shadow-sm btn-submit-act" onclick="window.submitActividad(this)">
-            Guardar Actividad + Foto
+            Guardar Actividad y Fotos
         </button>
     `;
     document.getElementById('actividadesContainer').appendChild(div);
@@ -250,21 +247,24 @@ window.seleccionarFotoGaleria = function(urlVisor, urlPdf) {
     if(!btnDestinoGaleria) return;
     
     const card = btnDestinoGaleria.closest('.act-card');
-    const container = card.querySelector('.foto-preview-container');
+    const container = card.querySelector('.fotos-wrapper');
     
-    // 1. Mostramos la miniatura ultrarrápida de Drive en pantalla
-    container.querySelector('.act-preview-img').src = urlVisor;
+    const thumbId = 'thumb_gal_' + Date.now() + Math.random().toString(36).substr(2,5);
     
-    // 2. Guardamos la URL de Firebase en el input original (para que el PDF la lea)
-    // (Si es una foto muy vieja que no tiene urlPdf, usamos el visor como respaldo)
-    container.querySelector('.act-foto-url').value = urlPdf || urlVisor; 
+    // CORRECCIÓN: Botón "X" siempre visible (top-1 right-1)
+    const thumbHtml = `
+        <div id="${thumbId}" class="foto-item w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-corpBlue-300 rounded-lg bg-white shadow-sm" data-url-visor="${urlVisor}" data-url-pdf="${urlPdf || urlVisor}">
+            <div class="absolute top-0 left-0 bg-corpBlue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-br-lg z-10"><span class="material-symbols-outlined text-[10px] align-middle">cloud</span> NUBE</div>
+            <img src="${urlVisor}" class="w-full h-full object-cover rounded-lg">
+            <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition z-20" onclick="window.removerFoto(this)">✕</button>
+        </div>
+    `;
     
-    // 3. Guardamos la URL del visor en un atributo personalizado para que la base de datos lo sepa
-    container.dataset.urlVisor = urlVisor;
-
-    container.querySelector('.act-foto-base64').value = ""; 
+    container.insertAdjacentHTML('beforeend', thumbHtml);
     
-    container.classList.remove('hidden');
+    const thumbElement = document.getElementById(thumbId);
+    thumbElement.isNewFile = false;
+    
     window.cerrarModalGaleria();
 };
 
@@ -320,131 +320,116 @@ function crearModalGaleriaSiNoExiste() {
 }
 
 window.removerFoto = function(btn) {
-    const container = btn.closest('.foto-preview-container');
-    container.classList.add('hidden');
-    container.querySelector('.act-preview-img').removeAttribute('src');
-    container.querySelector('.act-foto-url').value = '';
-    container.querySelector('.act-foto-base64').value = '';
-    const card = btn.closest('.act-card');
-    if (card.querySelector('.act-camera')) card.querySelector('.act-camera').value = '';
-    if (card.querySelector('.act-upload')) card.querySelector('.act-upload').value = '';
+    const item = btn.closest('.foto-item');
+    if(item) item.remove();
 };
 
 window.previsualizarFoto = function(input) {
-    if(input.files && input.files[0]) {
-        const file = input.files[0];
-        const reader = new FileReader();
+    if(input.files && input.files.length > 0) {
+        const container = input.closest('.act-card').querySelector('.fotos-wrapper');
         
-        reader.onload = function(e) {
-            const img = new Image();
+        // Iteramos por todas las fotos seleccionadas de forma aislada
+        Array.from(input.files).forEach(file => {
+            const reader = new FileReader();
             
-            img.onload = function() {
-                const canvas = document.getElementById('photoCanvas');
-                // Si el canvas no existe en el HTML, lo creamos en memoria temporalmente
-                const targetCanvas = canvas || document.createElement('canvas');
-                const ctx = targetCanvas.getContext('2d');
-                
-                const MAX_WIDTH = 1920;
-                let width = img.width;
-                let height = img.height;
-                
-                if (width > MAX_WIDTH) {
-                    height = Math.round((height * MAX_WIDTH) / width);
-                    width = MAX_WIDTH;
-                }
-                
-                targetCanvas.width = width;
-                targetCanvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // --- TEXTO (Metadatos de la foto) ---
-                const fontSize = Math.max(12, Math.floor(height * 0.02)); 
-                const interlineado = fontSize * 1.5; 
-                const logoX = width * 0.03;
-                
-                ctx.font = `${fontSize}px sans-serif`; 
-                ctx.fillStyle = "white";
-                ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-                ctx.shadowBlur = 4;
-                ctx.shadowOffsetX = 1;
-                ctx.shadowOffsetY = 1;
-
-                // --- FUNCIÓN INTERNA PARA SELLAR Y GUARDAR ---
-                const sellarFoto = (logoHeightPx, logoWidthPx, logoObject) => {
-                    const bloqueTextoHeight = interlineado * 4;
-                    // Posicionamos el inicio desde abajo hacia arriba
-                    let currentY = height - (bloqueTextoHeight + logoHeightPx + (height * 0.04));
-
-                    // 1. Dibujar el logo (si existe)
-                    if (logoObject) {
-                        ctx.drawImage(logoObject, logoX, currentY, logoWidthPx, logoHeightPx);
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // CORRECCIÓN 1: Creamos un lienzo (canvas) único y exclusivo para esta foto
+                    const targetCanvas = document.createElement('canvas');
+                    const ctx = targetCanvas.getContext('2d');
+                    
+                    const MAX_WIDTH = 1920;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
                     }
                     
-                    // Bajamos el cursor para empezar a escribir debajo del logo
-                    let textY = currentY + logoHeightPx + (interlineado * 0.8); 
+                    targetCanvas.width = width;
+                    targetCanvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
 
-                    // 2. Nombre Empresa
-                    ctx.fillText(window.APP_STATE.empresa.nombre || "Empresa Contratista", logoX, textY);
-                    textY += interlineado;
+                    const fontSize = Math.max(12, Math.floor(height * 0.02)); 
+                    const interlineado = fontSize * 1.5; 
+                    const logoX = width * 0.03;
                     
-                    // 3. Proyecto
-                    ctx.fillText((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), logoX, textY);
-                    textY += interlineado;
-                    
-                    // 4. Fecha y Hora
-                    const fechaSeleccionada = document.getElementById('dateField').value;
-                    const partes = fechaSeleccionada.split('-'); 
-                    const fechaFormat = partes.length === 3 ? `${partes[2]}.${partes[1]}.${partes[0]}` : fechaSeleccionada;
-                    const horas = String(new Date().getHours()).padStart(2, '0');
-                    const minutos = String(new Date().getMinutes()).padStart(2, '0');
-                    ctx.fillText(`${fechaFormat} ${horas}:${minutos}`, logoX, textY);
-                    textY += interlineado;
-                    
-                    // 5. Coordenadas GPS
-                    ctx.fillText(ubicacionGPS, logoX, textY);
-                    
-                    // Resetear sombra para no afectar futuras operaciones
-                    ctx.shadowColor = "transparent";
+                    ctx.font = `${fontSize}px sans-serif`; 
+                    ctx.fillStyle = "white";
+                    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
 
-                    // 6. Generar Base64 final y actualizar HTML
-                    const base64Generado = targetCanvas.toDataURL("image/jpeg", 0.85);
-                    const container = input.closest('.act-card').querySelector('.foto-preview-container');
-                    container.classList.remove('hidden');
-                    container.querySelector('.act-preview-img').src = base64Generado;
-                    container.querySelector('.act-foto-base64').value = base64Generado;
-                    container.querySelector('.act-foto-url').value = ''; 
-                };
+                    const sellarFoto = (logoHeightPx, logoWidthPx, logoObject) => {
+                        const bloqueTextoHeight = interlineado * 4;
+                        let currentY = height - (bloqueTextoHeight + logoHeightPx + (height * 0.04));
 
-                // --- DESCARGAR LOGO DESDE CACHÉ (NUEVA LÓGICA) ---
-                const logoUrl = window.APP_STATE.empresa.logo;
-                if (logoUrl) {
-                    const watermarkObj = new Image();
-                    watermarkObj.crossOrigin = "Anonymous"; // Crucial para evitar error de CORS al leer de Firebase Storage
-                    
-                    watermarkObj.onload = function() {
-                        const aspect = watermarkObj.naturalWidth / watermarkObj.naturalHeight;
-                        const targetLogoHeight = height * 0.06; // 6% de la altura total de la foto
-                        const targetLogoWidth = targetLogoHeight * aspect;
+                        if (logoObject) {
+                            ctx.drawImage(logoObject, logoX, currentY, logoWidthPx, logoHeightPx);
+                        }
                         
-                        sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
+                        let textY = currentY + logoHeightPx + (interlineado * 0.8); 
+                        ctx.fillText(window.APP_STATE.empresa.nombre || "Empresa Contratista", logoX, textY);
+                        textY += interlineado;
+                        ctx.fillText((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), logoX, textY);
+                        textY += interlineado;
+                        
+                        const fechaSeleccionada = document.getElementById('dateField').value;
+                        const partes = fechaSeleccionada.split('-'); 
+                        const fechaFormat = partes.length === 3 ? `${partes[2]}.${partes[1]}.${partes[0]}` : fechaSeleccionada;
+                        const horas = String(new Date().getHours()).padStart(2, '0');
+                        const minutos = String(new Date().getMinutes()).padStart(2, '0');
+                        ctx.fillText(`${fechaFormat} ${horas}:${minutos}`, logoX, textY);
+                        textY += interlineado;
+                        
+                        ctx.fillText(ubicacionGPS, logoX, textY);
+                        ctx.shadowColor = "transparent";
+
+                        const base64Generado = targetCanvas.toDataURL("image/jpeg", 0.85);
+                        
+                        // CORRECCIÓN 2: Posicionamos la "X" siempre visible y ligeramente adentro de la foto
+                        const thumbId = 'thumb_' + Date.now() + Math.random().toString(36).substr(2,5);
+                        const thumbHtml = `
+                            <div id="${thumbId}" class="foto-item w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm">
+                                <img src="${base64Generado}" class="w-full h-full object-cover rounded-lg">
+                                <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition z-10" onclick="window.removerFoto(this)">✕</button>
+                            </div>
+                        `;
+                        container.insertAdjacentHTML('beforeend', thumbHtml);
+                        
+                        const thumbElement = document.getElementById(thumbId);
+                        thumbElement.fileObj = file; 
+                        thumbElement.isNewFile = true;
                     };
-                    
-                    watermarkObj.onerror = function() {
-                        console.warn("No se pudo cargar el logo para la marca de agua. Sellando solo con texto.");
+
+                    const logoUrl = window.APP_STATE.empresa.logo;
+                    if (logoUrl) {
+                        const watermarkObj = new Image();
+                        watermarkObj.crossOrigin = "Anonymous"; 
+                        watermarkObj.onload = function() {
+                            const aspect = watermarkObj.naturalWidth / watermarkObj.naturalHeight;
+                            const targetLogoHeight = height * 0.06; 
+                            const targetLogoWidth = targetLogoHeight * aspect;
+                            sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
+                        };
+                        watermarkObj.onerror = function() { sellarFoto(0, 0, null); };
+                        watermarkObj.src = logoUrl;
+                    } else {
                         sellarFoto(0, 0, null);
-                    };
-                    
-                    watermarkObj.src = logoUrl;
-                } else {
-                    // Si la empresa no tiene logo asignado
-                    sellarFoto(0, 0, null);
-                }
+                    }
+                };
+                img.src = e.target.result;
             };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        });
+
+        input.value = ''; // Limpiamos el input
     }
 };
+
 window.addPersonnelRow = function() {
     let eOpt = '<option value="" disabled selected>Especialidad</option>';
     window.APP_STATE.proyectoActivo.especialidades.forEach(e => eOpt += `<option value="${e}">${e}</option>`);
@@ -551,17 +536,6 @@ window.submitActividad = async function(btn) {
     const fechaInput = document.getElementById('dateField').value;
     const card = btn.closest('.act-card');
     const txt = card.querySelector('.act-texto').value;
-    
-    // Capturar el archivo físico (si tomó/subió una foto nueva)
-    let fileOriginal = null;
-    const cameraInput = card.querySelector('.act-camera');
-    const uploadInput = card.querySelector('.act-upload');
-    if (cameraInput.files && cameraInput.files.length > 0) fileOriginal = cameraInput.files[0];
-    else if (uploadInput.files && uploadInput.files.length > 0) fileOriginal = uploadInput.files[0];
-
-    // Por si eligió una foto de la galería de la nube
-    const fotoGaleriaUrl = card.querySelector('.act-foto-url').value;
-    const visorGaleriaUrl = card.querySelector('.foto-preview-container').dataset.urlVisor || ""; // <- Nuevo!
 
     if(!txt.trim() || !fechaInput) return alert("Verifique la fecha y la descripción de la actividad.");
 
@@ -573,10 +547,25 @@ window.submitActividad = async function(btn) {
         const docId = fechaInput + "_" + PROJECT_ID;
         const reporteRef = doc(db, "reportes_diarios", docId);
         const usuarioFirma = window.APP_STATE.user.nombre || window.APP_STATE.user.email;
-        
         const idActividadGenerado = "ACT_" + Date.now().toString(36);
 
-        // 1. Guardar el texto y enlaces en Firestore PRIMERO
+        // 1. RECOLECTAR TODAS LAS FOTOS DE LA CUADRÍCULA
+        const fotoItems = Array.from(card.querySelectorAll('.foto-item'));
+        const evidenciasIniciales = []; // Las que vienen de galería
+        const archivosNuevos = [];      // Las tomadas/subidas físicamente
+
+        fotoItems.forEach((item, index) => {
+            if (item.isNewFile && item.fileObj) {
+                archivosNuevos.push(item.fileObj);
+            } else {
+                evidenciasIniciales.push({
+                    url_visor: item.dataset.urlVisor || "",
+                    url_pdf: item.dataset.urlPdf || ""
+                });
+            }
+        });
+
+        // 2. GUARDAR EL TEXTO Y ENLACES DE GALERÍA EN FIRESTORE
         await setDoc(reporteRef, {
             id_proyect: PROJECT_ID,
             fecha_proyect: fechaInput,
@@ -584,33 +573,40 @@ window.submitActividad = async function(btn) {
             actividades: arrayUnion({
                 id_act: idActividadGenerado,
                 texto_act: txt.trim(),
-                urlfoto_act: fotoGaleriaUrl || "", 
-                url_visor_drive: visorGaleriaUrl || "" // Guardamos el visor inmediatamente
+                // ESTRUCTURA NUEVA: Un arreglo en lugar de un string plano
+                evidencias_fotograficas: evidenciasIniciales 
             })
         }, { merge: true });
 
-        // 2. Si tomó una foto NUEVA física, mandarla al backend
-        if (fileOriginal && !fotoGaleriaUrl) {
-            btn.innerHTML = `Enviando a Google Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
-            
+        // 3. SUBIR MÚLTIPLES FOTOS NUEVAS EN PARALELO
+        if (archivosNuevos.length > 0) {
+            btn.innerHTML = `Enviando a Drive (${archivosNuevos.length}) <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+
             const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
-            const tempPath = `temp_fotos/ACT_${Date.now()}.jpg`;
-            const tempRef = ref(storage, tempPath);
-            
-            const metadatosBackend = {
-                customMetadata: {
-                    idFolderDrive: ID_FOLDER_DRIVE,
-                    empresa: window.APP_STATE.empresa.nombre || "Empresa",
-                    logoUrl: window.APP_STATE.empresa.logo || "",
-                    proyecto: window.APP_STATE.proyectoActivo.nombre,
-                    fecha: fechaInput,
-                    gps: ubicacionGPS,
-                    docId: docId,
-                    tipoOrigen: "reporte_diario",           
-                    idActividad: idActividadGenerado        
-                }
-            };
-            await uploadBytes(tempRef, fileOriginal, metadatosBackend);
+
+            // Mapeamos cada archivo a una promesa de subida a Storage
+            const promesasSubida = archivosNuevos.map((archivo, i) => {
+                const tempPath = `temp_fotos/${idActividadGenerado}_${Date.now()}_${i}.jpg`;
+                const tempRef = ref(storage, tempPath);
+
+                const metadatosBackend = {
+                    customMetadata: {
+                        idFolderDrive: ID_FOLDER_DRIVE,
+                        empresa: window.APP_STATE.empresa.nombre || "Empresa",
+                        logoUrl: window.APP_STATE.empresa.logo || "",
+                        proyecto: window.APP_STATE.proyectoActivo.nombre,
+                        fecha: fechaInput,
+                        gps: ubicacionGPS,
+                        docId: docId,
+                        tipoOrigen: "reporte_diario_multiple", // Flag especial para el Paso 3 (Cloud Function)
+                        idActividad: idActividadGenerado
+                    }
+                };
+                return uploadBytes(tempRef, archivo, metadatosBackend);
+            });
+
+            // Ejecutamos todas las subidas al mismo tiempo
+            await Promise.all(promesasSubida);
         }
 
         btn.innerHTML = "✅ Actividad Guardada";
@@ -846,6 +842,24 @@ window.renderizarEdicion = function() {
     html += `<h3 class="font-bold text-corpBlue-600 border-b pb-2 mb-3 mt-4 text-lg">Actividades Registradas</h3>`;
     if (data.actividades && data.actividades.length > 0) {
         data.actividades.forEach((act, index) => {
+            
+            // SOPORTE LEGACY: Transformamos la foto vieja a la nueva estructura visualmente
+            const evidencias = act.evidencias_fotograficas || [];
+            if (!act.evidencias_fotograficas && act.urlfoto_act) {
+                evidencias.push({ url_visor: act.url_visor_drive || act.urlfoto_act, url_pdf: act.urlfoto_act });
+            }
+
+            let evidenciasHTML = '';
+            evidencias.forEach(ev => {
+                const thumbId = 'thumb_edit_' + Date.now() + Math.random().toString(36).substr(2,5);
+                evidenciasHTML += `
+                    <div id="${thumbId}" class="foto-item w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm" data-url-visor="${ev.url_visor}" data-url-pdf="${ev.url_pdf}">
+                        <img src="${ev.url_visor}" class="w-full h-full object-cover rounded-lg">
+                        <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition z-10" onclick="window.removerFoto(this)">✕</button>
+                    </div>
+                `;
+            });
+
             html += `
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 relative act-card">
                 <button class="absolute top-2 right-2 bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded text-xs font-bold transition" onclick="eliminarElementoEdicion('actividades', ${index})">Eliminar</button>
@@ -853,7 +867,7 @@ window.renderizarEdicion = function() {
                 <label class="block text-xs font-bold text-slate-500 mb-1">Descripción:</label>
                 <textarea id="edit_act_${index}" class="act-texto w-full p-2.5 border border-slate-300 rounded-lg mb-3 text-sm outline-none focus:border-corpBlue-500">${act.texto_act}</textarea>
                 
-                <div class="flex gap-3 mb-4">
+                <div class="flex gap-3 mb-2">
                     <div class="flex-1 flex flex-col sm:flex-row gap-2 justify-center relative">
                         <button type="button" class="flex-1 bg-corpBlue-600 hover:bg-corpBlue-700 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-camera').click()">
                             <span class="material-symbols-outlined text-[18px]">photo_camera</span> Tomar
@@ -861,25 +875,16 @@ window.renderizarEdicion = function() {
                         <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="this.parentElement.querySelector('.act-upload').click()">
                             <span class="material-symbols-outlined text-[18px]">upload_file</span> Subir
                         </button>
-                        <!-- NUEVO BOTÓN DE GALERÍA -->
                         <button type="button" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition" onclick="window.abrirModalFotosDia(this)">
                             <span class="material-symbols-outlined text-[18px]">photo_library</span> Galería
                         </button>
                         
-                        <!-- Inputs ocultos vitales para que funcionen los botones de Tomar y Subir -->
                         <input type="file" class="act-camera hidden" accept="image/*" capture="environment" onchange="window.previsualizarFoto(this)">
-                        <input type="file" class="act-upload hidden" accept="image/*" onchange="window.previsualizarFoto(this)">
-                    </div>
-
-                    <div class="foto-preview-container ${act.urlfoto_act ? '' : 'hidden'} w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative border border-slate-300 rounded-lg bg-white shadow-sm">
-                        <!-- LA IMAGEN VISIBLE USA DRIVE -->
-                        <img class="act-preview-img w-full h-full object-cover rounded-lg" src="${act.url_visor_drive || act.urlfoto_act || ''}">
-                        <button type="button" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition" onclick="window.removerFoto(this)">✕</button>
-                        <!-- EL INPUT OCULTO GUARDA FIREBASE PARA EL PDF -->
-                        <input type="hidden" class="act-foto-url" value="${act.urlfoto_act || ''}"> 
-                        <input type="hidden" class="act-foto-base64">
+                        <input type="file" class="act-upload hidden" accept="image/*" multiple onchange="window.previsualizarFoto(this)">
                     </div>
                 </div>
+
+                <div class="fotos-wrapper flex flex-wrap gap-3 mb-4 empty:hidden pt-2">${evidenciasHTML}</div>
                 
                 <button class="w-full bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition btn-submit-act" onclick="window.actualizarActividadEdicion(this, ${index})">
                     Guardar Cambios de Actividad
@@ -970,16 +975,7 @@ window.actualizarActividadEdicion = async function(btn, index) {
     const PROJECT_ID = window.APP_STATE.proyectoActivo.id;
     const card = btn.closest('.act-card');
     const nuevoTexto = card.querySelector('.act-texto').value;
-    const fotoUrlExistente = card.querySelector('.act-foto-url').value;
-    const container = card.querySelector('.foto-preview-container'); // Seleccionamos el contenedor
     const fechaInput = document.getElementById('editDateField').value;
-
-    // 1. CAPTURAR EL ARCHIVO FÍSICO NUEVO (Si es que usó Tomar o Subir)
-    let fileOriginal = null;
-    const cameraInput = card.querySelector('.act-camera');
-    const uploadInput = card.querySelector('.act-upload');
-    if (cameraInput.files && cameraInput.files.length > 0) fileOriginal = cameraInput.files[0];
-    else if (uploadInput.files && uploadInput.files.length > 0) fileOriginal = uploadInput.files[0];
 
     if(!nuevoTexto.trim()) return alert("El texto no puede estar vacío.");
 
@@ -991,47 +987,60 @@ window.actualizarActividadEdicion = async function(btn, index) {
         const docId = fechaInput + "_" + PROJECT_ID;
         const idActividadActual = window.CURRENT_EDIT_DOC.actividades[index].id_act;
 
-        // 2. ACTUALIZAMOS EL TEXTO EN LA BASE DE DATOS INMEDIATAMENTE
-        window.CURRENT_EDIT_DOC.actividades[index].texto_act = nuevoTexto.trim();
-        
-        // Si no subió una foto física, procesamos los links de Galería o borrado
-        if (!fileOriginal) {
-            window.CURRENT_EDIT_DOC.actividades[index].urlfoto_act = fotoUrlExistente || "";
-            
-            if (!fotoUrlExistente) {
-                // Si eliminó la foto con la X roja, borramos el visor
-                window.CURRENT_EDIT_DOC.actividades[index].url_visor_drive = ""; 
-            } else if (container.dataset.urlVisor) {
-                // ¡AQUÍ ESTÁ LA MAGIA! Si eligió de la Galería, capturamos su enlace visor
-                window.CURRENT_EDIT_DOC.actividades[index].url_visor_drive = container.dataset.urlVisor;
+        // 1. RECOLECTAR FOTOS EN EDICIÓN
+        const fotoItems = Array.from(card.querySelectorAll('.foto-item'));
+        const evidenciasActualizadas = [];
+        const archivosNuevos = [];
+
+        fotoItems.forEach((item, i) => {
+            if (item.isNewFile && item.fileObj) {
+                archivosNuevos.push(item.fileObj);
+            } else {
+                evidenciasActualizadas.push({
+                    url_visor: item.dataset.urlVisor || "",
+                    url_pdf: item.dataset.urlPdf || ""
+                });
             }
-        }
+        });
+
+        // 2. ACTUALIZAMOS TEXTO Y ARRAY DE EVIDENCIAS EN MEMORIA
+        window.CURRENT_EDIT_DOC.actividades[index].texto_act = nuevoTexto.trim();
+        window.CURRENT_EDIT_DOC.actividades[index].evidencias_fotograficas = evidenciasActualizadas;
+        
+        // Limpiamos los campos legacy para mantener la BD ordenada
+        delete window.CURRENT_EDIT_DOC.actividades[index].urlfoto_act;
+        delete window.CURRENT_EDIT_DOC.actividades[index].url_visor_drive;
 
         btn.innerHTML = "Actualizando Base de Datos...";
         await updateDoc(window.CURRENT_EDIT_REF, { actividades: window.CURRENT_EDIT_DOC.actividades });
 
-        // 3. SI SUBIÓ UNA FOTO NUEVA, LA ENVIAMOS AL BACKEND
-        if (fileOriginal) {
-            btn.innerHTML = `Enviando a Google Drive <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
+        // 3. SUBIR FOTOS NUEVAS A STORAGE
+        if (archivosNuevos.length > 0) {
+            btn.innerHTML = `Enviando a Drive (${archivosNuevos.length}) <span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>`;
             
             const ID_FOLDER_DRIVE = window.APP_STATE.proyectoActivo.idfolder_regfoto_proyect;
-            const tempPath = `temp_fotos/EDIT_${Date.now()}.jpg`;
-            const tempRef = ref(storage, tempPath);
             
-            const metadatosBackend = {
-                customMetadata: {
-                    idFolderDrive: ID_FOLDER_DRIVE,
-                    empresa: window.APP_STATE.empresa.nombre || "Empresa",
-                    logoUrl: window.APP_STATE.empresa.logo || "",
-                    proyecto: window.APP_STATE.proyectoActivo.nombre,
-                    fecha: fechaInput,
-                    gps: ubicacionGPS,
-                    docId: docId,
-                    tipoOrigen: "reporte_diario",           
-                    idActividad: idActividadActual       
-                }
-            };
-            await uploadBytes(tempRef, fileOriginal, metadatosBackend);
+            const promesasSubida = archivosNuevos.map((archivo, i) => {
+                const tempPath = `temp_fotos/EDIT_${idActividadActual}_${Date.now()}_${i}.jpg`;
+                const tempRef = ref(storage, tempPath);
+                
+                const metadatosBackend = {
+                    customMetadata: {
+                        idFolderDrive: ID_FOLDER_DRIVE,
+                        empresa: window.APP_STATE.empresa.nombre || "Empresa",
+                        logoUrl: window.APP_STATE.empresa.logo || "",
+                        proyecto: window.APP_STATE.proyectoActivo.nombre,
+                        fecha: fechaInput,
+                        gps: ubicacionGPS,
+                        docId: docId,
+                        tipoOrigen: "reporte_diario_multiple", 
+                        idActividad: idActividadActual       
+                    }
+                };
+                return uploadBytes(tempRef, archivo, metadatosBackend);
+            });
+            
+            await Promise.all(promesasSubida);
         }
 
         btn.innerHTML = "✅ Actualizado";
@@ -1230,37 +1239,58 @@ window.accionGenerarPrevisualizacion = async function() {
             {}, {}, { text: totalCant.toString(), alignment: 'center', bold: true, fontSize: 9, fillColor: '#F1F5F9' }
         ]);
 
-        const actividadesConFoto = (data.actividades || []).filter(a => a.urlfoto_act);
-        const fotosProcesadas = [];
-        for (let a of actividadesConFoto) {
-            const b64 = await urlToBase64(a.urlfoto_act);
-            if (b64) fotosProcesadas.push({ base64: b64, texto: a.texto_act });
+        // === 2.5 NUEVO: AGRUPACIÓN EN BLOQUES FOTOGRÁFICOS ===
+        const bloquesFotograficos = [];
+        const actividadesFull = data.actividades || [];
+        
+        for (let i = 0; i < actividadesFull.length; i++) {
+            const act = actividadesFull[i];
+            let urlsPDF = [];
+            
+            // A) Recolectar URLs Legacy (1 sola foto antigua)
+            if (act.urlfoto_act && (!act.evidencias_fotograficas || act.evidencias_fotograficas.length === 0)) {
+                urlsPDF.push(act.urlfoto_act);
+            }
+            // B) Recolectar URLs Multi-Foto (Nueva versión)
+            if (act.evidencias_fotograficas && act.evidencias_fotograficas.length > 0) {
+                urlsPDF = act.evidencias_fotograficas.map(ev => ev.url_pdf).filter(url => url !== "");
+            }
+
+            if (urlsPDF.length > 0) {
+                let base64List = [];
+                for (let url of urlsPDF) {
+                    const b64 = await urlToBase64(url);
+                    if (b64) base64List.push(b64);
+                }
+                
+                if (base64List.length > 0) {
+                    bloquesFotograficos.push({
+                        titulo: `ACTIVIDAD ${i + 1}: ${act.texto_act}`,
+                        fotos: base64List
+                    });
+                }
+            }
         }
 
         // 3. Objeto de datos estandarizado (usando APP_STATE)
         const datosPlantilla = {
             logo: window.APP_STATE.empresa.logo ? await urlToBase64(window.APP_STATE.empresa.logo) : '',
             nombreEmpresa: window.APP_STATE.empresa.nombre || "Index Corp",
-            
-            // Datos del proyecto
             nombreProyecto: window.APP_STATE.proyectoActivo.nombre,
             cliente: window.APP_STATE.proyectoActivo.cliente,
             contratista: window.APP_STATE.proyectoActivo.contratista,
             supervision: window.APP_STATE.proyectoActivo.supervision,
-            
-            // Datos del usuario que está creando el reporte
             elaboradoPor: window.APP_STATE.user.nombre,
             cargoElaborador: window.APP_STATE.user.cargo, 
             rolEmpresaUsuario: window.APP_STATE.user.rolEmpresa, 
             firmaGrafica: window.APP_STATE.user.firmaUrl ? await urlToBase64(window.APP_STATE.user.firmaUrl) : null,
-            
-            // Documento
             fecha: fechaFmt,
             correlativo: correlativo,
             listaActividades: listaActividades,
             bodyPersonal: bodyPersonal,
             listaAnotaciones: listaAnotaciones,
-            fotosProcesadas: fotosProcesadas
+            // Sustituimos 'fotosProcesadas' por el nuevo arreglo estructurado
+            bloquesFotograficos: bloquesFotograficos 
         };
 
         // 4. Importar dinámicamente la plantilla PDFMake
@@ -1343,8 +1373,8 @@ window.cargarDatosMensajeria = async function() {
     document.getElementById('envioAsunto').value = `REPORTE DIARIO DE OBRA - ${projName} - N° ${correlativo} (${fechaFmt})`;
 
     const formatEmails = (str) => str ? str.replace(/;/g, ',').replace(/\s+/g, '') : "";
-    document.getElementById('envioPara').value = formatEmails(window.APP_STATE.proyectoActivo.correosPara);
-    document.getElementById('envioCc').value = formatEmails(window.APP_STATE.proyectoActivo.correosCC);
+    document.getElementById('envioPara').value = formatEmails(window.APP_STATE.proyectoActivo.correosrepdiaPara);
+    document.getElementById('envioCc').value = formatEmails(window.APP_STATE.proyectoActivo.correosrepdiaCC);
 
     let linkDescarga = "⚠️ (El PDF aún no ha sido generado/guardado en la pestaña PDF)";
 

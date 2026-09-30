@@ -182,63 +182,99 @@ export function generarDocDefinition(datos) {
 
     docContent.push(bloqueFirma);
 
-    // 4. Bloque de Fotos (Estricto 6 por página)
-    const FOTOS_POR_PAGINA = 6;
-    for (let offset = 0; offset < datos.fotosProcesadas.length; offset += FOTOS_POR_PAGINA) {
-        const bloqueFotos = datos.fotosProcesadas.slice(offset, offset + FOTOS_POR_PAGINA);
-
+    // ==========================================
+    // 4. BLOQUES FOTOGRÁFICOS DINÁMICOS
+    // ==========================================
+    if (datos.bloquesFotograficos && datos.bloquesFotograficos.length > 0) {
+        
+        // 4.1 Título General y Salto de Página
         docContent.push({ text: '', pageBreak: 'before' });
-
-        const photoColumns = [];
-        for (let i = 0; i < bloqueFotos.length; i += 2) {
-            const f1 = bloqueFotos[i];
-            const f2 = bloqueFotos[i + 1];
-            const numIndex1 = offset + i + 1;
-            const numIndex2 = offset + i + 2;
-
-            const rowCols = [
-                {
-                    stack: [{
-                        table: { widths: ['*'], body: [
-                            [{ image: f1.base64, fit: [260, 160], alignment: 'center', margin: [0, 2, 0, 2] }],
-                            [{ text: `${numIndex1}. ${f1.texto}`, fontSize: 8, bold: true, alignment: 'center', margin: [2, 3, 2, 3], fillColor: TEMA.fondoPieFoto }]
-                        ]},
-                        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => TEMA.lineaBordes, vLineColor: () => TEMA.lineaBordes }
-                    }], width: '50%'
-                }
-            ];
-
-            if (f2) {
-                rowCols.push({
-                    stack: [{
-                        table: { widths: ['*'], body: [
-                            [{ image: f2.base64, fit: [260, 160], alignment: 'center', margin: [0, 2, 0, 2] }],
-                            [{ text: `${numIndex2}. ${f2.texto}`, fontSize: 8, bold: true, alignment: 'center', margin: [2, 3, 2, 3], fillColor: TEMA.fondoPieFoto }]
-                        ]},
-                        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => TEMA.lineaBordes, vLineColor: () => TEMA.lineaBordes }
-                    }], width: '50%'
-                });
-            } else {
-                rowCols.push({ text: '', width: '50%' });
-            }
-            photoColumns.push({ columns: rowCols, columnGap: 12, margin: [0, 0, 0, 8] });
-        }
-
         docContent.push({
             table: {
                 headerRows: 1,
                 widths: ['*'],
                 body: [
-                    [{ text: 'REGISTRO FOTOGRÁFICO Y ACTIVIDADES DE OBRA', fontSize: 8, bold: true, color: TEMA.colorPrimario, fillColor: TEMA.fondoTituloLista }],
-                    [{ stack: photoColumns, margin: [0, 2, 0, 2] }]
+                    [{ text: 'REGISTRO FOTOGRÁFICO Y EVIDENCIAS', fontSize: 8, bold: true, color: TEMA.colorPrimario, fillColor: TEMA.fondoTituloLista }]
                 ]
             },
-            layout: {
-                hLineWidth: () => 0,
-                vLineWidth: (i) => (i === 0 ? 3 : 0),
-                vLineColor: () => TEMA.colorPrimario
-            },
-            margin: [0, 4, 0, 4]
+            layout: { hLineWidth: () => 0, vLineWidth: (i) => (i === 0 ? 3 : 0), vLineColor: () => TEMA.colorPrimario },
+            margin: [0, 4, 0, 10]
+        });
+
+        // 4.2 Iterar por cada Bloque de Actividad
+        datos.bloquesFotograficos.forEach(bloque => {
+            
+            // A. Creamos el objeto del Título pero NO lo inyectamos al documento todavía
+            const tituloObj = {
+                table: {
+                    widths: ['*'],
+                    body: [
+                        [{ text: bloque.titulo, fontSize: 8, bold: true, color: TEMA.colorPrimario, fillColor: '#F8FAFC', margin: [4, 4, 4, 4] }]
+                    ]
+                },
+                layout: { hLineWidth: () => 1, vLineWidth: () => 3, hLineColor: () => TEMA.lineaBordes, vLineColor: () => TEMA.colorPrimario },
+                margin: [0, 0, 0, 6]
+            };
+
+            // B. Pre-calculamos todas las filas de fotos de esta actividad
+            const filasDeFotos = [];
+            for (let i = 0; i < bloque.fotos.length; i += 2) {
+                const f1 = bloque.fotos[i];
+                const f2 = bloque.fotos[i + 1];
+                const rowCols = [];
+
+                // Columna 1 (Foto Izquierda)
+                rowCols.push({
+                    stack: [{
+                        table: { widths: ['*'], body: [
+                            [{ image: f1, fit: [260, 160], alignment: 'center', margin: [0, 2, 0, 2] }]
+                        ]},
+                        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => TEMA.lineaBordes, vLineColor: () => TEMA.lineaBordes }
+                    }], width: '50%'
+                });
+
+                // Columna 2 (Foto Derecha o Vacío)
+                if (f2) {
+                    rowCols.push({
+                        stack: [{
+                            table: { widths: ['*'], body: [
+                                [{ image: f2, fit: [260, 160], alignment: 'center', margin: [0, 2, 0, 2] }]
+                            ]},
+                            layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => TEMA.lineaBordes, vLineColor: () => TEMA.lineaBordes }
+                        }], width: '50%'
+                    });
+                } else {
+                    rowCols.push({ text: '', width: '50%' }); 
+                }
+
+                filasDeFotos.push({ columns: rowCols, columnGap: 12, margin: [0, 0, 0, 8] });
+            }
+
+            // C. MAGIA ANTIO-HUÉRFANOS: Amarra el Título con la PRIMERA fila de fotos
+            if (filasDeFotos.length > 0) {
+                // Inyectamos el título y la fila 1 en un "stack" inquebrantable
+                docContent.push({
+                    stack: [
+                        tituloObj,
+                        filasDeFotos[0]
+                    ],
+                    unbreakable: true 
+                });
+
+                // D. Inyectamos el resto de las filas de fotos (si la actividad tiene más de 2 fotos)
+                for (let j = 1; j < filasDeFotos.length; j++) {
+                    docContent.push({
+                        stack: [ filasDeFotos[j] ],
+                        unbreakable: true // Que no se corte la foto a la mitad
+                    });
+                }
+            } else {
+                // Por si alguna vez hay una actividad guardada extrañamente sin fotos
+                docContent.push(tituloObj);
+            }
+            
+            // Espaciado extra al terminar la actividad completa
+            docContent.push({ text: '', margin: [0, 0, 0, 6] });
         });
     }
 
