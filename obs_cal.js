@@ -509,15 +509,24 @@ function renderizarTarjetaStatus(obs, index) {
     const clickUrlHallazgo = obs.url_foto_hallazgo || obs.url_foto_hallazgo_visor || '#';
     const clickUrlLevan = obs.url_foto_levantamiento || obs.url_foto_levantamiento_visor || '#';
 
-    const esRecienteHallazgo = ((new Date() - new Date(obs.fecha_creacion_sistema || 0)) / 1000) < 30;
-    
-    let fotoHallazgoHtml = urlVisorHallazgo 
-        ? `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${urlVisorHallazgo}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Antes</div><a href="${clickUrlHallazgo}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`
-        : (esRecienteHallazgo ? `<div class="w-full h-40 md:h-48 bg-blue-50 rounded-lg border-2 border-dashed border-blue-300 flex flex-col items-center justify-center text-blue-500"><span class="material-symbols-outlined animate-spin text-3xl mb-1">cloud_sync</span></div>` : `<div class="w-full h-40 md:h-48 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xs font-bold">Sin Foto</div>`);
+    // Botón con "this" para animarlo directamente
+    const btnRecargaIndividual = `<button type="button" onclick="event.stopPropagation(); window.forzarRecargaFotoIndividual('${obs._docId}', this)" class="mt-2 text-[10px] bg-slate-200 hover:bg-corpBlue-100 text-corpBlue-700 px-3 py-1.5 rounded-full flex items-center gap-1 transition font-bold"><span class="material-symbols-outlined text-[14px]">sync</span> Consultar Nube</button>`;
 
-    let fotoSolucionHtml = urlVisorLevan 
-        ? `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${urlVisorLevan}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Después (Solución)</div><a href="${clickUrlLevan}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`
-        : `<div class="w-full h-40 md:h-48 bg-blue-50 rounded-lg border-2 border-dashed border-blue-300 flex flex-col items-center justify-center text-blue-500 shadow-inner"><span class="material-symbols-outlined animate-spin text-3xl mb-1">cloud_sync</span><span class="text-[10px] font-bold uppercase text-center px-2">Procesando<br>Nube...</span></div>`;
+    // Envolvemos las fotos en un ID único para inyectarlas directamente ahí
+    let fotoHallazgoHtml = `<div id="wrapper_hallazgo_${obs._docId}" class="w-full">`;
+    fotoHallazgoHtml += urlVisorHallazgo 
+        ? `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${urlVisorHallazgo}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Antes</div><a href="${clickUrlHallazgo}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`
+        : `<div class="w-full h-40 md:h-48 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-xs font-bold">Sin Foto ${btnRecargaIndividual}</div>`;
+    fotoHallazgoHtml += `</div>`;
+
+    let fotoSolucionHtml = '';
+    if (obs.estado !== 'Pendiente') {
+        fotoSolucionHtml = `<div id="wrapper_levan_${obs._docId}" class="w-full">`;
+        fotoSolucionHtml += urlVisorLevan 
+            ? `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${urlVisorLevan}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Después (Solución)</div><a href="${clickUrlLevan}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`
+            : `<div class="w-full h-40 md:h-48 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-xs font-bold">Sin Foto ${btnRecargaIndividual}</div>`;
+        fotoSolucionHtml += `</div>`;
+    }
 
     // ==========================================
     // --- SEGURIDAD CENTRALIZADA (RBAC) ---
@@ -801,6 +810,76 @@ window.rechazarLevantamiento = async function(docId) {
     } catch (error) { alert("Error al rechazar: " + error.message); }
 };
 
+// Función inyectora directa (Mantiene el acordeón abierto)
+window.forzarRecargaFotoIndividual = async function(docId, btnElement) {
+    // 1. Mostrar estado de carga visual en el botón que el usuario cliqueó
+    const originalText = btnElement.innerHTML;
+    btnElement.innerHTML = `<span class="material-symbols-outlined text-[14px] animate-spin">sync</span> Cargando...`;
+    btnElement.disabled = true;
+
+    try {
+        const docRef = doc(db, "observaciones_calidad", docId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            const dataFresca = docSnap.data();
+            
+            // Evaluamos si ya hay enlaces
+            const vH = dataFresca.url_foto_hallazgo_visor || dataFresca.url_foto_hallazgo;
+            const cH = dataFresca.url_foto_hallazgo || dataFresca.url_foto_hallazgo_visor || '#';
+            
+            const vL = dataFresca.url_foto_levantamiento_visor || dataFresca.url_foto_levantamiento;
+            const cL = dataFresca.url_foto_levantamiento || dataFresca.url_foto_levantamiento_visor || '#';
+            
+            let actualizoAlgo = false;
+
+            // 2. Si encontró el enlace del Antes, inyecta el HTML en su caja exacta
+            if (vH) {
+                const wrapperH = document.getElementById(`wrapper_hallazgo_${docId}`);
+                if (wrapperH && wrapperH.innerHTML.includes('Sin Foto')) {
+                    wrapperH.innerHTML = `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${vH}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Antes</div><a href="${cH}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`;
+                    actualizoAlgo = true;
+                }
+            }
+
+            // 3. Si encontró el enlace del Después, inyecta el HTML en su caja exacta
+            if (vL) {
+                const wrapperL = document.getElementById(`wrapper_levan_${docId}`);
+                if (wrapperL && wrapperL.innerHTML.includes('Sin Foto')) {
+                    wrapperL.innerHTML = `<div class="relative w-full h-40 md:h-48 rounded-lg overflow-hidden border border-slate-200 group bg-slate-100"><img src="${vL}" class="w-full h-full object-cover"><div class="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[10px] font-bold py-1.5 text-center uppercase tracking-widest">Después (Solución)</div><a href="${cL}" target="_blank" class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center text-white text-xs font-bold uppercase tracking-widest transition">Ver Alta Calidad</a></div>`;
+                    actualizoAlgo = true;
+                }
+            }
+
+            if (actualizoAlgo) {
+                // 4. Actualizamos la memoria silenciosamente sin recargar la lista entera
+                const index = window.OBS_CACHE.findIndex(o => o._docId === docId);
+                if (index !== -1) {
+                    window.OBS_CACHE[index].url_foto_hallazgo = dataFresca.url_foto_hallazgo || "";
+                    window.OBS_CACHE[index].url_foto_hallazgo_visor = dataFresca.url_foto_hallazgo_visor || "";
+                    window.OBS_CACHE[index].url_foto_levantamiento = dataFresca.url_foto_levantamiento || "";
+                    window.OBS_CACHE[index].url_foto_levantamiento_visor = dataFresca.url_foto_levantamiento_visor || "";
+                }
+            } else {
+                // Si todavía no hay link, devolvemos el botón a su estado normal
+                btnElement.innerHTML = originalText;
+                btnElement.disabled = false;
+                alert("⏳ La nube aún está procesando las imágenes. Por favor, intente de nuevo en unos segundos.");
+            }
+
+        } else {
+            alert("❌ Error: No se encontró el documento.");
+            btnElement.innerHTML = originalText;
+            btnElement.disabled = false;
+        }
+    } catch (error) {
+        console.error("Error consultando la foto:", error);
+        alert("Ocurrió un error al contactar la nube.");
+        btnElement.innerHTML = originalText;
+        btnElement.disabled = false;
+    }
+};
+
 // ==========================================
 // 5. PESTAÑA: PREVISUALIZAR Y GENERAR REPORTE PDF
 // ==========================================
@@ -1051,8 +1130,8 @@ window.cargarDatosMensajeriaObs = async function() {
 
         // 2. Formatear Correos del Proyecto (Para / CC)
         const formatEmails = (str) => str ? str.replace(/;/g, ',').replace(/\s+/g, '') : "";
-        document.getElementById('envioPara').value = formatEmails(window.APP_STATE.proyectoActivo.correosPara);
-        document.getElementById('envioCc').value = formatEmails(window.APP_STATE.proyectoActivo.correosCC);
+        document.getElementById('envioPara').value = formatEmails(window.APP_STATE.proyectoActivo.correosobscalPara);
+        document.getElementById('envioCc').value = formatEmails(window.APP_STATE.proyectoActivo.correosobscalCC);
 
         // 3. Obtener el Enlace del PDF Oficial de Firestore
         let linkDescarga = "⚠️ (El PDF oficial aún no ha sido generado/guardado en la pestaña Reporte)";

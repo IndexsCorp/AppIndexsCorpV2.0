@@ -87,32 +87,20 @@ export function initAppCore(requiereProyecto = true) {
                     };
 
                     if (window.APP_STATE.user.idEmpresa) {
+                        // 1. Extraer datos de la empresa (incluyendo marca de agua)
                         const empDoc = await getDoc(doc(db, "empresas", window.APP_STATE.user.idEmpresa));
                         if (empDoc.exists()) {
                             const empData = empDoc.data();
                             window.APP_STATE.empresa = {
                                 id: empDoc.id,
                                 nombre: empData.nombre_empresa || "",
-                                logo: empData.logo_empresa || ""
+                                logo: empData.logo_empresa || "",
+                                logo_marca_agua: empData.logo_marca_agua || "" 
                             };
                         }
                         
-                    }
-                    if (window.APP_STATE.user.idEmpresa) {
-                        const empDoc = await getDoc(doc(db, "empresas", window.APP_STATE.user.idEmpresa));
-                        if (empDoc.exists()) {
-                            const empData = empDoc.data();
-                            window.APP_STATE.empresa = {
-                                id: empDoc.id,
-                                nombre: empData.nombre_empresa || "",
-                                logo: empData.logo_empresa || ""
-                            };
-                        }
-                        // --- NUEVO: GUARDAR LISTA DE PROYECTOS EN CACHÉ PARA EL SIDEBAR ---
-                        const proyectosQuery = window.APP_STATE.user.idEmpresa 
-                            ? query(collection(db, "proyectos"), where("id_empresa", "==", window.APP_STATE.user.idEmpresa))
-                            : collection(db, "proyectos");
-                            
+                        // 2. Extraer lista de proyectos
+                        const proyectosQuery = query(collection(db, "proyectos"), where("id_empresa", "==", window.APP_STATE.user.idEmpresa));
                         const proySnap = await getDocs(proyectosQuery);
                         const listaProyectos = [];
                         const permitidos = (window.APP_STATE.user.proyectosPermitidos || "").split(/[,;]/).map(p => p.trim());
@@ -128,7 +116,6 @@ export function initAppCore(requiereProyecto = true) {
                             }
                         });
                         localStorage.setItem("INDEX_PROYECTOS_LIST", JSON.stringify(listaProyectos));
-                        // -----------------------------------------------------------------
                     }
                 }
 
@@ -186,12 +173,13 @@ export function initAppCore(requiereProyecto = true) {
                             idClienteOficial: idCliente,
                             idContratistaOficial: idContratista,
                             idSupervisionOficial: idSupervision,
-                            correosPara: proyData.correos_Para || "",
-                            correosCC: proyData.correos_cc || "",
+                            correosrepdiaPara: proyData.correos_repdia_para || "",
+                            correosrepdiaCC: proyData.correos_repdia_cc || "",
+                            correosobscalPara: proyData.correos_obscal_para || "",
+                            correosobscalCC: proyData.correos_obscal_cc || "",
                             appsHabilitadas: proyData.apps || [], 
                             idfolder_regfoto_proyect: proyData.idfolder_regfoto_proyect || "",
                             idfolder_repdia_proyect: proyData.idfolder_repdia_proyect || "",
-                            // --- NUEVA VARIABLE PARA OBS. DE CALIDAD ---
                             idfolder_obscal_proyect: proyData.idfolder_obscal_proyect || "" 
                         };
                     }

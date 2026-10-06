@@ -62,109 +62,182 @@ window.procesarFotoMultiple = async function(event) {
 
     document.getElementById('statusText').innerHTML = `<span class="text-corpBlue-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> Procesando miniatura(s)...</span>`;
     
-    for (let i = 0; i < files.length; i++) {
-        await procesarUnaFoto(files[i]);
+    try {
+        for (let i = 0; i < files.length; i++) {
+            await procesarUnaFoto(files[i]);
+        }
+        
+        // Si todo sale bien, actualizamos el texto al éxito
+        document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Fotos listas para subir</span>`;
+    } catch (error) {
+        console.error("Error procesando las fotos:", error);
+        document.getElementById('statusText').innerHTML = `<span class="text-red-500 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">error</span> Error al procesar</span>`;
+    }
+
+    // --- LIMPIEZA ABSOLUTA DE MEMORIA (A PRUEBA DE FALLOS) ---
+    // 1. Limpiamos directamente el input que disparó el evento (la forma más segura)
+    if (event.target) {
+        event.target.value = "";
     }
     
-    document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Fotos listas para subir</span>`;
+    // 2. Limpiamos los inputs específicos solo si existen en el HTML
+    const camInput = document.getElementById('cameraInput');
+    if (camInput) camInput.value = "";
     
-    document.getElementById('cameraInput').value = "";
-    document.getElementById('galleryInput').value = "";
+    const galInput = document.getElementById('galleryInput');
+    if (galInput) galInput.value = "";
 };
 
 function procesarUnaFoto(file) {
     return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.onload = function() {
-                const canvas = document.getElementById('photoCanvas');
-                const ctx = canvas.getContext('2d');
-                
-                const MAX_WIDTH = 1920;
-                let width = img.width;
-                let height = img.height;
-                
-                if (width > MAX_WIDTH) {
-                    height = Math.round((height * MAX_WIDTH) / width);
-                    width = MAX_WIDTH;
-                }
-                
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
+        try {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const img = new Image();
+                    img.onload = function() {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            
+                            const MAX_WIDTH = 1920;
+                            let width = img.width || MAX_WIDTH;
+                            let height = img.height || 1080;
+                            
+                            if (width > MAX_WIDTH) {
+                                height = Math.round((height * MAX_WIDTH) / width);
+                                width = MAX_WIDTH;
+                            }
+                            
+                            canvas.width = width;
+                            canvas.height = height;
+                            ctx.drawImage(img, 0, 0, width, height);
 
-                // --- TEXTO Y LOGO (Solo para la miniatura visual) ---
-                const fontSize = Math.max(12, Math.floor(height * 0.02)); 
-                const interlineado = fontSize * 1.5; 
-                const logoX = width * 0.03;
-                
-                ctx.font = `${fontSize}px sans-serif`; 
-                ctx.fillStyle = "white";
-                ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-                ctx.shadowBlur = 4;
-                ctx.shadowOffsetX = 1;
-                ctx.shadowOffsetY = 1;
+                            const fontGrande = Math.max(40, Math.floor(height * 0.06));  
+                            const fontMedia = Math.max(18, Math.floor(height * 0.028));  
+                            const fontPequena = Math.max(12, Math.floor(height * 0.014));  
+                            const margin = width * 0.03;
+                            
+                            const sombraOffset = Math.max(3, Math.floor(width * 0.004)); 
+                            const sombraBlur = Math.max(8, Math.floor(width * 0.012));   
 
-                const sellarFoto = (logoHeightPx, logoWidthPx, logoObject) => {
-                    const bloqueTextoHeight = interlineado * 4;
-                    let currentY = height - (bloqueTextoHeight + logoHeightPx + (height * 0.04));
+                            ctx.fillStyle = "white";
+                            ctx.shadowColor = "rgba(0, 0, 0, 1)"; 
+                            ctx.shadowBlur = sombraBlur;
+                            ctx.shadowOffsetX = sombraOffset;
+                            ctx.shadowOffsetY = sombraOffset;
 
-                    if (logoObject) {
-                        ctx.drawImage(logoObject, logoX, currentY, logoWidthPx, logoHeightPx);
-                    }
-                    
-                    let textY = currentY + logoHeightPx + (interlineado * 0.8); 
+                            const sellarFoto = (logoHeightPx, logoWidthPx, logoObject) => {
+                                try {
+                                    const dibujarTextoConSombra = (texto, x, y) => {
+                                        ctx.strokeStyle = "rgba(0, 0, 0, 0.8)"; 
+                                        ctx.lineWidth = Math.max(2, Math.floor(width * 0.0015)); 
+                                        ctx.strokeText(texto, x, y); 
+                                        ctx.fillText(texto, x, y);   
+                                    };
+                                    
+                                    ctx.textAlign = "right"; 
+                                    let cursorYRight = margin;
+                                    
+                                    if (logoObject) {
+                                        const logoX = width - margin - logoWidthPx;
+                                        ctx.drawImage(logoObject, logoX, cursorYRight, logoWidthPx, logoHeightPx);
+                                        cursorYRight += logoHeightPx + (fontPequena * 1.5);
+                                    } else {
+                                        cursorYRight += (fontPequena * 1.5);
+                                    }
 
-                    ctx.fillText(window.APP_STATE.empresa.nombre || "Empresa Sin Nombre", logoX, textY);
-                    textY += interlineado;
-                    
-                    ctx.fillText((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), logoX, textY);
-                    textY += interlineado;
-                    
-                    const fechaSeleccionada = document.getElementById('fechaRegistro').value;
-                    const partes = fechaSeleccionada.split('-'); 
-                    const fechaFormat = `${partes[2]}.${partes[1]}.${partes[0]}`;
-                    const horas = String(new Date().getHours()).padStart(2, '0');
-                    const minutos = String(new Date().getMinutes()).padStart(2, '0');
-                    ctx.fillText(`${fechaFormat} ${horas}:${minutos}`, logoX, textY);
-                    textY += interlineado;
-                    
-                    ctx.fillText(ubicacionGPS, logoX, textY);
-                    ctx.shadowColor = "transparent";
+                                    ctx.font = `${fontPequena}px sans-serif`;
+                                    dibujarTextoConSombra(window.APP_STATE.empresa.nombre || "Empresa Contratista", width - margin, cursorYRight);
+                                    cursorYRight += (fontPequena * 1.5);
+                                    dibujarTextoConSombra((window.APP_STATE.proyectoActivo.nombre || "").substring(0, 40), width - margin, cursorYRight);
 
-                    // Generamos el base64 comprimido (60% calidad) para la miniatura
-                    const base64Generado = canvas.toDataURL("image/jpeg", 0.60);
-                    
-                    // Guardamos AMBOS: El archivo original intacto y la miniatura
-                    fotosLote.push({
-                        fileOriginal: file,
-                        thumbBase64: base64Generado
-                    });
-                    
-                    actualizarGaleria();
-                    resolve();
-                };
+                                    ctx.textAlign = "left"; 
+                                    const fechaSeleccionada = document.getElementById('fechaRegistro').value; 
+                                    const dateObj = new Date(fechaSeleccionada + "T12:00:00"); 
+                                    const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+                                    const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+                                    
+                                    const strFecha = `${dateObj.getDate()} de ${meses[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+                                    const strDia = dias[dateObj.getDay()];
 
-                const logoUrl = window.APP_STATE.empresa.logo;
-                if (logoUrl) {
-                    const watermarkObj = new Image();
-                    watermarkObj.crossOrigin = "Anonymous";
-                    watermarkObj.onload = function() {
-                        const aspect = watermarkObj.naturalWidth / watermarkObj.naturalHeight;
-                        const targetLogoHeight = height * 0.06;
-                        const targetLogoWidth = targetLogoHeight * aspect;
-                        sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
+                                    const now = new Date();
+                                    const horaTexto = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+                                    let cursorYLeft = height - margin;
+
+                                    ctx.font = `${fontPequena}px sans-serif`;
+                                    dibujarTextoConSombra(ubicacionGPS, margin, cursorYLeft);
+                                    
+                                    cursorYLeft -= (fontPequena * 2);
+
+                                    ctx.font = `bold ${fontGrande}px sans-serif`;
+                                    dibujarTextoConSombra(horaTexto, margin, cursorYLeft);
+                                    const timeWidth = ctx.measureText(horaTexto).width;
+
+                                    const lineX = margin + timeWidth + 20;
+                                    ctx.beginPath();
+                                    ctx.moveTo(lineX, cursorYLeft - fontGrande + (fontGrande * 0.2));
+                                    ctx.lineTo(lineX, cursorYLeft);
+                                    ctx.lineWidth = Math.max(3, Math.floor(width * 0.003));
+                                    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; 
+                                    ctx.shadowColor = "rgba(0, 0, 0, 1)";
+                                    ctx.shadowBlur = sombraBlur;
+                                    ctx.stroke();
+                                    ctx.shadowColor = "transparent"; 
+
+                                    ctx.font = `bold ${fontMedia}px sans-serif`;
+                                    const textXFecha = lineX + 20;
+                                    dibujarTextoConSombra(strFecha, textXFecha, cursorYLeft - (fontGrande / 2) + (fontMedia * 0.3));
+                                    dibujarTextoConSombra(strDia, textXFecha, cursorYLeft);
+
+                                    // Si falla la generación Base64 por caché, lo atrapamos aquí sin trabar la app
+                                    const base64Generado = canvas.toDataURL("image/jpeg", 0.60);
+                                    
+                                    fotosLote.push({
+                                        fileOriginal: file,
+                                        thumbBase64: base64Generado
+                                    });
+                                    
+                                    actualizarGaleria();
+                                    resolve();
+                                } catch (e) {
+                                    console.error("Error al sellar foto:", e);
+                                    resolve(); // Resolvemos igual para desatascar la aplicación
+                                }
+                            };
+
+                            const logoUrl = window.APP_STATE.empresa.logo_marca_agua || window.APP_STATE.empresa.logo;
+                            if (logoUrl) {
+                                const watermarkObj = new Image();
+                                watermarkObj.crossOrigin = "Anonymous";
+                                watermarkObj.onload = function() {
+                                    const aspect = watermarkObj.naturalWidth / watermarkObj.naturalHeight;
+                                    const targetLogoHeight = Math.max(10, height * 0.04);
+                                    const targetLogoWidth = targetLogoHeight * aspect;
+                                    sellarFoto(targetLogoHeight, targetLogoWidth, watermarkObj);
+                                };
+                                watermarkObj.onerror = function() { sellarFoto(0, 0, null); };
+                                
+                                // Truco de seguridad para caché con validador de URL
+                                const separator = logoUrl.includes('?') ? '&' : '?';
+                                watermarkObj.src = logoUrl + separator + "bypass=" + Date.now();
+                            } else {
+                                sellarFoto(0, 0, null);
+                            }
+                        } catch (e) {
+                            console.error("Error procesando canvas:", e);
+                            resolve(); 
+                        }
                     };
-                    watermarkObj.onerror = function() { sellarFoto(0, 0, null); };
-                    watermarkObj.src = logoUrl;
-                } else {
-                    sellarFoto(0, 0, null);
-                }
+                    img.onerror = function() { resolve(); };
+                    img.src = e.target.result;
+                } catch (e) { resolve(); }
             };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.onerror = function() { resolve(); };
+            reader.readAsDataURL(file);
+        } catch (globalError) { resolve(); }
     });
 }
 
@@ -176,20 +249,30 @@ function actualizarGaleria() {
         zonaSubida.classList.remove('hidden');
         zonaSubida.classList.add('flex');
         document.getElementById('contadorFotos').innerText = fotosLote.length;
-        document.getElementById('textoBtnGuardar').innerText = `Subir ${fotosLote.length} foto(s)`;
         
-        galeriaScroll.innerHTML = "";
+        // Blindaje: Si el span existe lo actualiza, si no, reconstruye el interior del botón
+        const spanTextoBtn = document.getElementById('textoBtnGuardar');
+        if (spanTextoBtn) {
+            spanTextoBtn.innerText = `Subir ${fotosLote.length} foto(s)`;
+        } else {
+            document.getElementById('btnGuardarMasivo').innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> <span id="textoBtnGuardar">Subir ${fotosLote.length} foto(s)</span>`;
+        }
+        
+        let htmlConstructor = "";
         fotosLote.forEach((fotoItem, index) => {
-            galeriaScroll.innerHTML += `
+            htmlConstructor += `
                 <div class="relative w-full aspect-[3/4]">
                     <img src="${fotoItem.thumbBase64}" class="w-full h-full object-cover rounded-lg border border-slate-300 shadow-sm bg-white">
-                    <button onclick="window.eliminarFoto(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[12px] font-bold shadow-md hover:bg-red-600 transition">X</button>
+                    <button onclick="window.eliminarFoto(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[12px] font-bold shadow-md hover:bg-red-600 transition z-10">✕</button>
                 </div>
             `;
         });
+        galeriaScroll.innerHTML = htmlConstructor;
+        
     } else {
         zonaSubida.classList.add('hidden');
         zonaSubida.classList.remove('flex');
+        galeriaScroll.innerHTML = "";
     }
 }
 
@@ -279,7 +362,7 @@ window.guardarYEnviarLote = async function() {
                 customMetadata: {
                     idFolderDrive: ID_FOLDER_DRIVE,
                     empresa: window.APP_STATE.empresa.nombre || "Empresa Sin Nombre",
-                    logoUrl: window.APP_STATE.empresa.logo || "", 
+                    logoUrl: window.APP_STATE.empresa.logo_marca_agua || window.APP_STATE.empresa.logo || "", 
                     proyecto: window.APP_STATE.proyectoActivo.nombre || "Proyecto Sin Nombre",
                     fecha: fechaSeleccionada,
                     gps: ubicacionGPS,
@@ -310,7 +393,8 @@ window.guardarYEnviarLote = async function() {
 };
 
 function restaurarBotonSubida(btn) {
-    btn.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> Subir Fotos a la nube`;
+    // Restauramos incluyendo la etiqueta span para que actualizarGaleria no falle en el lote 2
+    btn.innerHTML = `<span class="material-symbols-outlined">cloud_upload</span> <span id="textoBtnGuardar">Subir Fotos a la nube</span>`;
     btn.disabled = false;
     document.getElementById('statusText').innerHTML = `<span class="text-green-600 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Listo para nuevo lote</span>`;
 }
