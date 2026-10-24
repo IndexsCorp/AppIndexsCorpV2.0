@@ -4,6 +4,8 @@
 
 import { auth, db, initAppCore } from "./app_core.js";
 import { doc, getDoc, collection, query, where, getDocs, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+const storage = getStorage();
 // ==========================================
 // 0. MATRIZ DE PERMISOS (SISTEMA RBAC - PROTOCOLOS)
 // ==========================================
@@ -1330,9 +1332,17 @@ window.generarDossierPdfProtocolo = async function() {
             // Detección de celular para no forzar iframes pesados
             const esCelular = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             
+            const toolbarHtml = `
+                <div class="w-full flex justify-end mb-3">
+                    <button type="button" onclick="window.enviarPdfProtocoloDrive()" id="btnEnviarDrive" class="bg-corpGreen hover:bg-corpGreen-hover text-white font-bold py-2.5 px-6 rounded-lg flex items-center gap-2 shadow-md transition">
+                        <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Guardar y Enviar a Drive
+                    </button>
+                </div>
+            `;
+
             if (esCelular) {
-                rootCont.innerHTML = `
-                    <div class="text-center p-6 bg-slate-50 rounded-xl w-full border border-slate-300 h-full flex flex-col justify-center items-center">
+                rootCont.innerHTML = toolbarHtml + `
+                    <div class="text-center p-6 bg-slate-50 rounded-xl w-full border border-slate-300 flex-1 flex flex-col justify-center items-center h-64">
                         <span class="material-symbols-outlined text-5xl text-corpBlue-600 mb-2">picture_as_pdf</span>
                         <p class="text-slate-700 font-bold mb-1 text-base">PDF Compilado Exitosamente</p>
                         <p class="text-slate-500 text-xs mb-4">La vista previa incrustada no está disponible en móviles.</p>
@@ -1341,11 +1351,11 @@ window.generarDossierPdfProtocolo = async function() {
                         </a>
                     </div>`;
             } else {
-                rootCont.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-full rounded-xl shadow-md border border-slate-300"></iframe>`;
+                rootCont.innerHTML = toolbarHtml + `<iframe src="${pdfUrl}" class="w-full flex-1 min-h-[500px] rounded-xl shadow-md border border-slate-300"></iframe>`;
             }
 
             rootCont.classList.remove('hidden');
-            rootCont.classList.add('flex');
+            rootCont.classList.add('flex', 'flex-col'); // Añadido flex-col para que la barra se apile sobre el PDF
         });
 
     } catch (error) {
@@ -1390,4 +1400,54 @@ window.cargarComboProtocolos = async function(filtro = "") {
     });
 
     select.innerHTML = optionsHtml;
+};
+
+// ==========================================
+// ENVÍO DE PDF A FIREBASE Y GOOGLE DRIVE
+// ==========================================
+window.enviarPdfProtocoloDrive = async function() {
+    if (!pdfBlobGeneradoProtocolo || !CURRENT_PROT_PREVIEW) {
+        return alert("⚠️ No hay un PDF compilado en memoria. Vuelva a generarlo.");
+    }
+
+    const btn = document.getElementById('btnEnviarDrive');
+    const origText = btn.innerHTML;
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-lg">refresh</span> Subiendo a la nube...`;
+    btn.disabled = true;
+
+    try {
+        const proj = window.APP_STATE.proyectoActivo;
+        const correlativo = CURRENT_PROT_PREVIEW.correlativo || "SN";
+        // Generamos un nombre único para el archivo
+        const nombreArchivo = `Protocolo_${CURRENT_PROT_PREVIEW.tipo_protocolo}_${correlativo}_${Date.now()}.pdf`;
+        
+        // Carpeta donde la Cloud Function está escuchando (Ajusta 'temp_reportes' según tu backend)
+        const tempPath = `temp_reportes/${nombreArchivo}`; 
+        const fileRef = ref(storage, tempPath);
+
+        // Metadatos para enrutar el PDF en Google Drive
+        const metadatosBackend = {
+            contentType: 'application/pdf',
+            customMetadata: {
+                // Si no tienes un idFolder específico para protocolos, asegúrate de crearlo en tu BD
+                idFolderDrive: proj.idfolder_prot_proyect || "", 
+                proyecto: proj.nombre || "Proyecto Sin Nombre",
+                docId: CURRENT_PROT_PREVIEW._docId,
+                tipoOrigen: 'protocolo_calidad'
+
+            }
+        };
+
+        // Subir a Firebase Storage
+        await uploadBytes(fileRef, pdfBlobGeneradoProtocolo, metadatosBackend);
+        
+        alert("✅ PDF enviado a la nube exitosamente. En unos segundos estará en Google Drive.");
+        
+    } catch (error) {
+        console.error("Error al subir el PDF:", error);
+        alert("Ocurrió un error al enviar el documento a la nube.");
+    } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+    }
 };
