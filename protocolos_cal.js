@@ -175,40 +175,39 @@ window.cargarPlantillaChecklist = async function(tipoProtocolo) {
             <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 shadow-sm mb-6" data-seccion="${secIndex}">
                 <h3 class="text-xs font-bold text-corpBlue-700 uppercase tracking-wider mb-3">${seccion.titulo}</h3>
                 
-                <!-- TABLA DE CHECKLIST -->
-                <table class="w-full text-xs text-left bg-white rounded-lg border border-slate-200 overflow-hidden mb-3">
-                    <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <tr>
-                            <th class="p-2.5 w-10 text-center">#</th>
-                            <th class="p-2.5">Descripción de la Actividad</th>
-                            <th class="p-2.5 w-12 text-center">SI</th>
-                            <th class="p-2.5 w-12 text-center">NO</th>
-                            <th class="p-2.5 w-12 text-center">N/A</th>
-                            <th class="p-2.5 w-10 text-center"></th>
-                        </tr>
-                    </thead>
-                    
-                    <!-- AQUÍ SE AÑADIÓ LA ETIQUETA TBODY CON EL ID DINÁMICO -->
-                    <tbody id="tbody_seccion_${secIndex}">
-                    
-                    ${seccion.items.map((item, itemIndex) => `
-                            <tr class="border-b border-slate-100 hover:bg-slate-50">
-                                <td class="p-2 text-center font-bold text-slate-400">${itemIndex + 1}</td>
-                                <td class="p-2">
-                                    <input type="text" value="${item}" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-xs font-medium">
-                                    <span class="traza-badge hidden text-[9px] font-bold text-corpBlue-400 mt-1 flex items-center gap-1"></span>
-                                    <input type="hidden" class="traza-data" value="">
-                                </td>
-                                <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
-                                <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
-                                <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
-                                <td class="p-2 text-center">
-                                    <button type="button" onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition"><span class="material-symbols-outlined text-sm">delete</span></button>
-                                </td>
+                <!-- TABLA DE CHECKLIST (CON SCROLL Y TEXTAREA) -->
+                <div class="overflow-x-auto w-full mb-3 rounded-lg border border-slate-200">
+                    <table class="w-full min-w-[500px] text-xs text-left bg-white overflow-hidden">
+                        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-2.5 w-8 text-center">#</th>
+                                <th class="p-2.5">Descripción de la Actividad</th>
+                                <th class="p-2.5 w-10 text-center">SI</th>
+                                <th class="p-2.5 w-10 text-center">NO</th>
+                                <th class="p-2.5 w-10 text-center">N/A</th>
+                                <th class="p-2.5 w-10 text-center"></th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody id="tbody_seccion_${secIndex}">
+                        ${seccion.items.map((item, itemIndex) => `
+                                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                    <td class="p-2 text-center font-bold text-slate-400">${itemIndex + 1}</td>
+                                    <td class="p-2">
+                                        <textarea rows="2" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-xs font-medium resize-y min-h-[40px]">${item}</textarea>
+                                        <span class="traza-badge hidden text-[9px] font-bold text-corpBlue-400 mt-1 flex items-center gap-1"></span>
+                                        <input type="hidden" class="traza-data" value="">
+                                    </td>
+                                    <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
+                                    <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
+                                    <td class="p-2 text-center"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
+                                    <td class="p-2 text-center">
+                                        <button type="button" onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition"><span class="material-symbols-outlined text-sm">delete</span></button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
                 
                 <button type="button" onclick="window.agregarFilaChecklist('tbody_seccion_${secIndex}', ${secIndex})" class="bg-white hover:bg-slate-100 text-corpBlue-600 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-sm transition mb-4">
                     <span class="material-symbols-outlined text-sm">add</span> Añadir criterio
@@ -271,7 +270,8 @@ window.agregarFilaChecklist = function(tbodyId, secIndex) {
     tr.innerHTML = `
         <td class="p-2 text-center font-bold text-slate-400">-</td>
         <td class="p-2">
-            <input type="text" onchange="window.registrarCambioTraza(this)" placeholder="Escriba un nuevo criterio de inspección..." class="w-full p-1 bg-transparent border-b border-slate-300 focus:border-corpBlue-500 outline-none text-slate-800 text-xs font-medium">
+            <!-- AQUÍ ESTÁ EL CAMBIO: Se usa textarea en lugar de input -->
+            <textarea rows="2" onchange="window.registrarCambioTraza(this)" placeholder="Escriba un nuevo criterio de inspección..." class="w-full p-1 bg-transparent border-b border-slate-300 focus:border-corpBlue-500 outline-none text-slate-800 text-xs font-medium resize-y min-h-[40px]"></textarea>
             <span class="traza-badge hidden text-[9px] font-bold text-corpBlue-400 mt-1 flex items-center gap-1"></span>
             <input type="hidden" class="traza-data" value="">
         </td>
