@@ -175,32 +175,32 @@ window.cargarPlantillaChecklist = async function(tipoProtocolo) {
             <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 shadow-sm mb-6" data-seccion="${secIndex}">
                 <h3 class="text-xs font-bold text-corpBlue-700 uppercase tracking-wider mb-3">${seccion.titulo}</h3>
                 
-                <!-- TABLA DE CHECKLIST (AJUSTADA PARA CELULAR SIN SCROLL HORIZONTAL) -->
-                <div class="w-full mb-3 rounded-lg border border-slate-200">
-                    <table class="w-full text-xs text-left bg-white overflow-hidden table-fixed">
+                <!-- TABLA DE CHECKLIST (AUTO-AJUSTABLE TIPO EXCEL) -->
+                <div class="w-full mb-3 rounded-lg border border-slate-200 overflow-x-hidden">
+                    <table class="w-full text-xs text-left bg-white">
                         <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                             <tr>
-                                <th class="p-1 sm:p-2 w-6 sm:w-8 text-center">#</th>
-                                <th class="p-1 sm:p-2">Descripción de la Actividad</th>
-                                <th class="p-1 w-8 sm:w-10 text-center text-[10px] sm:text-xs">SI</th>
-                                <th class="p-1 w-8 sm:w-10 text-center text-[10px] sm:text-xs">NO</th>
-                                <th class="p-1 w-8 sm:w-10 text-center text-[10px] sm:text-xs">N/A</th>
-                                <th class="p-1 w-6 sm:w-8 text-center"></th>
+                                <th class="p-1 w-6 text-center">#</th>
+                                <th class="p-1 w-full">Descripción de la Actividad</th>
+                                <th class="p-1 w-8 text-center text-[10px]">SI</th>
+                                <th class="p-1 w-8 text-center text-[10px]">NO</th>
+                                <th class="p-1 w-8 text-center text-[10px]">N/A</th>
+                                <th class="p-1 w-6 text-center"></th>
                             </tr>
                         </thead>
                         <tbody id="tbody_seccion_${secIndex}">
                         ${seccion.items.map((item, itemIndex) => `
                                 <tr class="border-b border-slate-100 hover:bg-slate-50">
-                                    <td class="p-1 sm:p-2 text-center font-bold text-slate-400 align-top pt-2.5 sm:pt-3">${itemIndex + 1}</td>
-                                    <td class="p-1 sm:p-2 align-top">
-                                        <textarea rows="3" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-y leading-tight">${item}</textarea>
+                                    <td class="p-1 text-center font-bold text-slate-400 align-top pt-3">${itemIndex + 1}</td>
+                                    <td class="p-1 align-top">
+                                        <textarea rows="1" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-none overflow-hidden leading-tight min-h-[30px]">${item}</textarea>
                                         <span class="traza-badge hidden text-[9px] font-bold text-corpBlue-400 mt-1 flex items-center gap-1"></span>
                                         <input type="hidden" class="traza-data" value="">
                                     </td>
-                                    <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
-                                    <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
-                                    <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
-                                    <td class="p-1 text-center align-top pt-2.5 sm:pt-3">
+                                    <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
+                                    <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
+                                    <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${itemIndex}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
+                                    <td class="p-1 text-center align-top pt-3">
                                         <button type="button" onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition"><span class="material-symbols-outlined text-sm">delete</span></button>
                                     </td>
                                 </tr>
@@ -268,16 +268,16 @@ window.agregarFilaChecklist = function(tbodyId, secIndex) {
     const rowId = new Date().getTime(); 
     
     tr.innerHTML = `
-        <td class="p-1 sm:p-2 text-center font-bold text-slate-400 align-top pt-2.5 sm:pt-3">-</td>
-        <td class="p-1 sm:p-2 align-top">
-            <textarea rows="3" onchange="window.registrarCambioTraza(this)" placeholder="Escriba un nuevo criterio de inspección..." class="w-full p-1 bg-transparent border-b border-slate-300 focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-y leading-tight"></textarea>
+        <td class="p-1 text-center font-bold text-slate-400 align-top pt-3">-</td>
+        <td class="p-1 align-top">
+            <textarea rows="1" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" onchange="window.registrarCambioTraza(this)" placeholder="Escriba un nuevo criterio..." class="w-full p-1 bg-transparent border-b border-slate-300 focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-none overflow-hidden leading-tight min-h-[30px]"></textarea>
             <span class="traza-badge hidden text-[9px] font-bold text-corpBlue-400 mt-1 flex items-center gap-1"></span>
             <input type="hidden" class="traza-data" value="">
         </td>
-        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
-        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
-        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
-        <td class="p-1 text-center align-top pt-2.5 sm:pt-3">
+        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600"></td>
+        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600"></td>
+        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" checked></td>
+        <td class="p-1 text-center align-top pt-3">
             <button type="button" onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition"><span class="material-symbols-outlined text-sm">delete</span></button>
         </td>
     `;
@@ -1095,16 +1095,16 @@ window.cargarProtocoloEnPantalla = async function(protocoloId) {
                     }
 
                     tr.innerHTML = `
-                        <td class="p-1 sm:p-2 text-center font-bold text-slate-400 align-top pt-2.5 sm:pt-3">${itemIndex + 1}</td>
-                        <td class="p-1 sm:p-2 align-top">
-                            <textarea rows="3" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-y leading-tight">${itemData.descripcion || ''}</textarea>
+                        <td class="p-1 text-center font-bold text-slate-400 align-top pt-3">${itemIndex + 1}</td>
+                        <td class="p-1 align-top">
+                            <textarea rows="1" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" onchange="window.registrarCambioTraza(this)" class="w-full p-1 bg-transparent border-b border-transparent focus:border-corpBlue-500 outline-none text-slate-800 text-[11px] sm:text-xs font-medium resize-none overflow-hidden leading-tight min-h-[30px]">${itemData.descripcion || ''}</textarea>
                             ${badgeHtml}
                             <input type="hidden" class="traza-data" value='${trazaValue}'>
                         </td>
-                        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600" ${itemData.estado === 'SI' ? 'checked data-last-checked="true"' : ''}></td>
-                        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600" ${itemData.estado === 'NO' ? 'checked data-last-checked="true"' : ''}></td>
-                        <td class="p-1 text-center align-top pt-2.5 sm:pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" ${itemData.estado === 'NA' ? 'checked data-last-checked="true"' : ''}></td>
-                        <td class="p-1 text-center align-top pt-2.5 sm:pt-3">
+                        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="SI" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-emerald-600" ${itemData.estado === 'SI' ? 'checked data-last-checked="true"' : ''}></td>
+                        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NO" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-red-600" ${itemData.estado === 'NO' ? 'checked data-last-checked="true"' : ''}></td>
+                        <td class="p-1 text-center align-top pt-3"><input type="radio" name="check_${secIndex}_${rowId}" value="NA" onclick="window.toggleRadioTraza(this)" class="w-4 h-4 accent-slate-400" ${itemData.estado === 'NA' ? 'checked data-last-checked="true"' : ''}></td>
+                        <td class="p-1 text-center align-top pt-3">
                             <button type="button" onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition"><span class="material-symbols-outlined text-sm">delete</span></button>
                         </td>
                     `;
