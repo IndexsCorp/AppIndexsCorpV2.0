@@ -180,7 +180,8 @@ export function initAppCore(requiereProyecto = true) {
                             appsHabilitadas: proyData.apps || [], 
                             idfolder_regfoto_proyect: proyData.idfolder_regfoto_proyect || "",
                             idfolder_repdia_proyect: proyData.idfolder_repdia_proyect || "",
-                            idfolder_obscal_proyect: proyData.idfolder_obscal_proyect || "" 
+                            idfolder_obscal_proyect: proyData.idfolder_obscal_proyect || "",
+                            idfolder_prot_proyect: proyData.idfolder_prot_proyect || "",
                         };
                     }
                 }
