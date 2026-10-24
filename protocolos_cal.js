@@ -1403,7 +1403,7 @@ window.cargarComboProtocolos = async function(filtro = "") {
 };
 
 // ==========================================
-// ENVÍO DE PDF A FIREBASE Y GOOGLE DRIVE
+// ENVÍO DE PDF A FIREBASE Y GOOGLE DRIVE (Sincronizado con Enrutador Universal)
 // ==========================================
 window.enviarPdfProtocoloDrive = async function() {
     if (!pdfBlobGeneradoProtocolo || !CURRENT_PROT_PREVIEW) {
@@ -1418,23 +1418,26 @@ window.enviarPdfProtocoloDrive = async function() {
     try {
         const proj = window.APP_STATE.proyectoActivo;
         const correlativo = CURRENT_PROT_PREVIEW.correlativo || "SN";
-        // Generamos un nombre único para el archivo
-        const nombreArchivo = `Protocolo_${CURRENT_PROT_PREVIEW.tipo_protocolo}_${correlativo}_${Date.now()}.pdf`;
         
-        // Carpeta donde la Cloud Function está escuchando (Ajusta 'temp_reportes' según tu backend)
-        const tempPath = `temp_reportes/${nombreArchivo}`; 
+        // 1. Nombre exacto que requiere el backend
+        const nombreArchivoFinal = `Protocolo_${CURRENT_PROT_PREVIEW.tipo_protocolo}_${correlativo}_${Date.now()}.pdf`;
+        
+        // 2. CORRECCIÓN DE CARPETA: El backend escucha en 'temp_pdfs/'
+        const tempPath = `temp_pdfs/${nombreArchivoFinal}`; 
         const fileRef = ref(storage, tempPath);
 
-        // Metadatos para enrutar el PDF en Google Drive
+        // 3. CORRECCIÓN DE METADATOS: El Manifiesto Universal exacto
         const metadatosBackend = {
             contentType: 'application/pdf',
             customMetadata: {
-                // Si no tienes un idFolder específico para protocolos, asegúrate de crearlo en tu BD
                 idFolderDrive: proj.idfolder_prot_proyect || "", 
-                proyecto: proj.nombre || "Proyecto Sin Nombre",
                 docId: CURRENT_PROT_PREVIEW._docId,
-                tipoOrigen: 'protocolo_calidad'
-
+                nombreArchivo: nombreArchivoFinal,
+                coleccionDB: 'protocolos_calidad',         // Tabla correcta en Firestore
+                carpetaResguardo: 'protocolos_pdf_finales',// Carpeta final en Storage
+                campoPdfDrive: 'url_pdf_drive',            // Nombre del campo para el link de Drive
+                campoPdfStorage: 'url_pdf_descarga',       // Nombre del campo para el link de Storage
+                nuevoEstado: 'Digitalizado'                // Actualiza el flujo automáticamente
             }
         };
 
